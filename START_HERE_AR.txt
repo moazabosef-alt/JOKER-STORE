@@ -1,0 +1,14 @@
+متجر الجوكر — نسخة جاهزة للرفع بعد ضبط الاتصال
+
+1) افتح config.js بأي محرر نصوص.
+2) رابط Supabase موجود بالفعل.
+3) استبدل PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE بمفتاح Publishable key من Supabase > Connect أو Project Settings > API Keys.
+   لا تستخدم service_role أو sb_secret.
+4) تأكد أن قاعدة البيانات فيها جداول categories و products و orders و admin_users وأن سياسات RLS وصلاحيات الصور صحيحة.
+5) افتح GitHub وأنشئ مستودعاً عاماً باسم al-joker-web.
+6) ارفع الملفات الموجودة داخل هذا المجلد إلى جذر المستودع (لا ترفع ZIP فقط).
+7) Settings > Pages > Deploy from a branch > main > /(root) > Save.
+8) افتح https://moazabosef-alt.github.io/al-joker-web/
+9) اختبر المنتجات والسلة وواتساب وتسجيل دخول المدير وإضافة منتج وصورة وحفظ طلب.
+
+مهم: لا يمكن ضمان عمل لوحة الإدارة أو قاعدة البيانات دون اختبار إعداد Supabase الحقيقي. لا تنشر المفتاح السري.
