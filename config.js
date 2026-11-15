@@ -2,6 +2,6 @@
 // المفتاح المسموح هنا هو Publishable (sb_publishable_...) فقط، وليس secret أو service_role.
 window.JOKER_CONFIG = {
   supabaseUrl: 'https://pntinaxiybywlocvhgif.supabase.co',
-  supabasePublishableKey: 'PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE',
+  supabasePublishableKey: 'sb_publishable_ضع_مفتاحك_هنا',
   whatsappNumber: '218915206879'
 };
