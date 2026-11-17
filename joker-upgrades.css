@@ -1,0 +1,25 @@
+/* JOKER STORE V3 — product photo viewer & staff usernames */
+.product .pic img[role="button"],.product .pic .illustration[role="button"]{cursor:zoom-in}
+.product .pic img[role="button"]:focus-visible,.product .pic .illustration[role="button"]:focus-visible,.joker-detail-photo img:focus-visible{outline:3px solid #ffce7b;outline-offset:-3px}
+.dialog.joker-product-detail{width:min(1040px,97vw);max-height:95dvh;padding:20px}
+.joker-detail-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(245px,0.8fr);gap:20px;align-items:stretch;max-height:calc(95dvh - 105px);overflow:auto}
+.joker-detail-photo{position:relative;min-width:0;min-height:330px;max-height:calc(95dvh - 125px);border:1px solid #79554a;border-radius:16px;background:radial-gradient(circle at 50% 30%,#3f3035,#18151a);display:flex;align-items:center;justify-content:center;overflow:auto}
+.joker-detail-photo img{width:100%;height:100%;max-height:calc(95dvh - 145px);object-fit:contain;display:block;cursor:zoom-in;transition:transform .18s ease;transform-origin:center}
+.joker-photo-zoomed img{transform:scale(1.6);cursor:zoom-out}
+.joker-photo-hint{position:absolute;right:12px;bottom:12px;pointer-events:none;background:#151013dd;border:1px solid #816252;border-radius:999px;color:#ffe5ad;font-size:11px;padding:6px 10px}
+.joker-detail-info{display:flex;flex-direction:column;gap:12px;min-width:0;overflow-y:auto;max-height:calc(95dvh - 125px)}
+.joker-detail-info p{margin:0;white-space:pre-wrap;line-height:1.9;overflow-wrap:anywhere;color:#ebdade}
+.joker-detail-info .price{margin-top:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.joker-detail-info #detailAdd{width:100%;min-height:48px;font-weight:bold;flex-shrink:0}
+#staffForm input[name="email"],#loginForm input[name="email"]{direction:ltr;text-align:left}
+@media(max-width:700px){
+ .dialog.joker-product-detail{width:100%;max-height:96dvh;padding:12px;border-radius:14px}
+ .joker-detail-layout{display:flex;flex-direction:column;gap:10px;max-height:calc(96dvh - 70px);overflow-y:auto}
+ .joker-detail-photo{min-height:0;height:min(42dvh,380px);flex-shrink:0}
+ .joker-detail-photo img{height:100%;max-height:none}
+ .joker-detail-info{max-height:none;overflow:visible;gap:8px}
+ .joker-detail-info p{font-size:13px;line-height:1.6}
+ .joker-detail-info .price{margin-top:0}
+ .joker-detail-info #detailAdd{position:sticky;bottom:0;z-index:2;box-shadow:0 -4px 16px #171116}
+ .joker-photo-hint{font-size:10px}
+}
