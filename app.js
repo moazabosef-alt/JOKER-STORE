@@ -48,9 +48,74 @@ function addCart(id){const p=store.products.find(x=>String(x.id)===String(id));i
 function cartLines(){return store.products.filter(p=>store.cart[p.id]>0&&p.available!==false).map(p=>({...p,qty:store.cart[p.id],unitPrice:salePrice(p)}))}
 function renderCart(){const items=cartLines(),total=items.reduce((s,p)=>s+p.unitPrice*p.qty,0);modal('🛒 سلة المشتريات',items.length?`${items.map(p=>`<div class="rows"><div><strong>${esc(p.name)}</strong><div class="mute textsm">${fmt(p.unitPrice)} × ${p.qty}</div></div><div class="steps"><button class="outline smallBtn" data-minus="${esc(p.id)}">−</button><button class="outline smallBtn" data-plus="${esc(p.id)}">+</button></div></div>`).join('')}<h3>الإجمالي: ${fmt(total)}</h3><button class="gold" id="checkout">إتمام الطلب</button>`:'<p>السلة فارغة. أضف منتجًا أولًا.</p>');$('dlgContent').querySelectorAll('[data-minus]').forEach(b=>b.onclick=()=>{let id=b.dataset.minus;store.cart[id]--;if(store.cart[id]<=0)delete store.cart[id];persistCart();updateCounts();renderCart()});$('dlgContent').querySelectorAll('[data-plus]').forEach(b=>b.onclick=()=>{let id=b.dataset.plus;store.cart[id]=Math.min(20,store.cart[id]+1);persistCart();updateCounts();renderCart()});if($('checkout'))$('checkout').onclick=()=>checkoutForm()}
 function receipt(order){const w=window.open('','_blank');if(!w)return toast('اسمح بالنوافذ المنبثقة لتصدير PDF');let rows=order.items.map(p=>`<tr><td>${esc(p.name)}</td><td>${p.quantity}</td><td>${fmt(p.price)}</td><td>${fmt(p.quantity*p.price)}</td></tr>`).join('');w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة ${esc(order.id)}</title><style>body{font:16px Tahoma,Arial;max-width:800px;margin:auto;padding:25px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #bbb;padding:10px;text-align:right}h1{color:#a27732}</style></head><body><h1>متجر الجوكر للإلكترونيات</h1><p>رقم الطلب: ${esc(order.id)}<br>الاسم: ${esc(order.name)}<br>الهاتف: ${esc(order.phone)}<br>واتساب: ${esc(order.whatsapp)}<br>العنوان: ${esc(order.address)}</p><table><tr><th>المنتج</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr>${rows}</table><h2>الإجمالي: ${fmt(order.total)}</h2><p>هذه فاتورة طلب أولية، ويتم تأكيد التسليم من المتجر.</p></body></html>`);w.document.close();setTimeout(()=>{w.focus();w.print()},350)}
-function whatsappText(o){return [`طلب جديد من متجر الجوكر`,`رقم الطلب: ${o.id}`,`الاسم: ${o.name}`,`الهاتف: ${o.phone}`,`واتساب: ${o.whatsapp}`,`العنوان: ${o.address||'-'}`,`ملاحظات: ${o.notes||'-'}`,'المنتجات:',...o.items.map(i=>`${i.name} × ${i.quantity} = ${fmt(i.price*i.quantity)}`),`الإجمالي: ${fmt(o.total)}`].join('\n')}
-function confirmOrder(o){modal('✅ تم تسجيل الطلب',`<div class="summary"><h3>طلبك رقم ${esc(o.id)}</h3><p>الإجمالي: <strong>${fmt(o.total)}</strong></p><p>تم حفظ الطلب، ويمكنك التواصل مع المحل أو حفظ الفاتورة.</p></div><div class="steps"><button class="gold" id="openWhatsapp">💬 فتح واتساب</button><button class="outline" id="printReceipt">🧾 فاتورة / PDF</button></div>`);$('printReceipt').onclick=()=>receipt(o);$('openWhatsapp').onclick=()=>{const phone=String(cfg.whatsappNumber||'').replace(/[^0-9]/g,'');if(!phone)return toast('رقم واتساب المحل غير مضبوط في الإعدادات');window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(whatsappText(o)),'_blank','noopener,noreferrer')}}
-function checkoutForm(){if(!db)return toast('الاتصال بقاعدة البيانات غير مضبوط');if(!cartLines().length)return toast('السلة فارغة');modal('تأكيد طلبك',`<form id="orderForm"><label class="field"><span>اسم الزبون</span><input name="name" maxlength="100" required autocomplete="name"></label><label class="field"><span>رقم الهاتف</span><input name="phone" type="tel" maxlength="25" required inputmode="tel"></label><label class="field"><span>رقم الواتساب (اختياري)</span><input name="whatsapp" type="tel" maxlength="25" inputmode="tel"></label><label class="field"><span>عنوان التوصيل</span><input name="address" maxlength="250"></label><label class="field"><span>ملاحظات الطلب</span><textarea name="notes" maxlength="500" rows="3"></textarea></label><button class="gold" type="submit">تسجيل الطلب</button><p id="orderError" class="order-error"></p></form>`);$('orderForm').onsubmit=async e=>{e.preventDefault();if(store.uiBusy)return;store.uiBusy=true;const btn=e.target.querySelector('[type=submit]');btn.disabled=true;const f=new FormData(e.target),name=String(f.get('name')).trim(),phone=String(f.get('phone')).trim(),wa=String(f.get('whatsapp')).trim()||phone,address=String(f.get('address')||''),notes=String(f.get('notes')||'');try{const lines=cartLines().map(p=>({product_id:String(p.id),quantity:p.qty}));if(!lines.length)throw Error('السلة فارغة');const {data,error}=await db.rpc('joker_place_order',{p_customer_name:name,p_customer_phone:phone,p_customer_whatsapp:wa,p_address:address,p_notes:notes,p_lines:lines});if(error)throw error;if(!data?.id||!Array.isArray(data.items))throw Error('لم يصل تأكيد الطلب');const order={id:String(data.id),name,phone,whatsapp:wa,address,notes,total:pnum(data.total),items:data.items};store.cart={};persistCart();updateCounts();confirmOrder(order)}catch(err){$('orderError').textContent=err.message||'تعذر حفظ الطلب';btn.disabled=false}finally{store.uiBusy=false}}}
+// WhatsApp checkout: no external subscription or WhatsApp API is used.
+// The three receiver numbers are selected with equal probability for EACH saved order.
+const WHATSAPP_ORDER_RECEIVERS=Object.freeze(['218915206879','218923319182','218925206879']);
+function chooseOrderReceiver(){
+  const count=WHATSAPP_ORDER_RECEIVERS.length;
+  if(typeof crypto==='undefined'||!crypto.getRandomValues) return WHATSAPP_ORDER_RECEIVERS[Math.floor(Math.random()*count)];
+  const max=0x100000000,limit=max-(max%count),buffer=new Uint32Array(1);
+  do{crypto.getRandomValues(buffer)}while(buffer[0]>=limit);
+  return WHATSAPP_ORDER_RECEIVERS[buffer[0]%count];
+}
+function normalizePhoneDigits(value){return String(value||'').replace(/[٠-٩]/g,x=>String(x.charCodeAt(0)-0x0660)).replace(/[۰-۹]/g,x=>String(x.charCodeAt(0)-0x06F0))}
+function isValidCustomerPhone(value){const v=normalizePhoneDigits(value).trim();const digits=(v.match(/[0-9]/g)||[]).length;return /^\+?[0-9()\s.\-]+$/.test(v)&&digits>=8&&digits<=15}
+function whatsappText(o){return [
+  '🃏 طلب جديد من متجر الجوكر',
+  'رقم الطلب: '+o.id,
+  '👤 اسم الزبون: '+o.name,
+  '📞 رقم الهاتف: '+o.phone,
+  '📱 واتساب الزبون: '+o.whatsapp,
+  '📍 العنوان: '+(o.address||'-'),
+  '📝 ملاحظات: '+(o.notes||'-'),
+  '', '🛒 تفاصيل المشتريات:',
+  ...o.items.map((item,i)=>[String(i+1)+') '+item.name,'   الكمية: '+item.quantity,'   سعر القطعة: '+fmt(item.price),'   إجمالي المنتج: '+fmt(Number(item.price)*Number(item.quantity))].join('\n')),
+  '', '💰 الإجمالي الكلي: '+fmt(o.total)
+].join('\n')}
+function confirmOrder(o){
+  // The chosen WhatsApp number stays fixed for this completed order and all repeated clicks.
+  const receiver=o.assignedWhatsapp||chooseOrderReceiver();
+  o.assignedWhatsapp=receiver;
+  const url='https://wa.me/'+receiver+'?text='+encodeURIComponent(whatsappText(o));
+  modal('✅ تم تسجيل الطلب',`<div class="summary"><h3>طلبك رقم ${esc(o.id)}</h3><p>الإجمالي: <strong>${fmt(o.total)}</strong></p><p>تم تسجيل طلبك في المتجر. اضغط على زر واتساب أدناه ثم اضغط إرسال داخل واتساب لإرسال تفاصيل الطلب إلى أحد أرقام المتجر.</p></div><div class="steps"><a class="gold" id="openWhatsapp" href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;min-height:44px;padding:10px 16px">💬 إرسال تفاصيل الطلب عبر واتساب</a><button class="outline" id="printReceipt">🧾 فاتورة / PDF</button></div>`);
+  $('printReceipt').onclick=()=>receipt(o);
+}
+function checkoutForm(){
+  if(!db)return toast('الاتصال بقاعدة البيانات غير مضبوط');
+  if(!cartLines().length)return toast('السلة فارغة');
+  // Name and phone are mandatory; native required + explicit JavaScript validation.
+  modal('تأكيد طلبك',`<form id="orderForm"><label class="field"><span>اسم الزبون (إجباري)</span><input name="name" maxlength="100" required autocomplete="name" placeholder="اكتب اسمك"></label><label class="field"><span>رقم الهاتف (إجباري)</span><input name="phone" type="tel" maxlength="25" required inputmode="tel" autocomplete="tel" placeholder="مثال: 0912345678"></label><label class="field"><span>رقم الواتساب (اختياري)</span><input name="whatsapp" type="tel" maxlength="25" inputmode="tel"></label><label class="field"><span>عنوان التوصيل</span><input name="address" maxlength="250"></label><label class="field"><span>ملاحظات الطلب</span><textarea name="notes" maxlength="500" rows="3"></textarea></label><p class="mute textsm">بعد تأكيد الطلب ستظهر رسالة واتساب جاهزة، وسترسلها بنفسك بالضغط على إرسال داخل واتساب.</p><button class="gold" type="submit">تأكيد الطلب والمتابعة إلى واتساب</button><p id="orderError" class="order-error" role="alert"></p></form>`);
+  $('orderForm').onsubmit=async e=>{
+    e.preventDefault();
+    if(store.uiBusy)return;
+    const form=e.currentTarget,btn=form.querySelector('[type=submit]');
+    const f=new FormData(form),name=String(f.get('name')||'').trim(),rawPhone=String(f.get('phone')||'').trim(),rawWhatsapp=String(f.get('whatsapp')||'').trim();
+    const phone=normalizePhoneDigits(rawPhone),wa=normalizePhoneDigits(rawWhatsapp||rawPhone);
+    const address=String(f.get('address')||'').trim(),notes=String(f.get('notes')||'').trim();
+    const err=$('orderError');
+    err.textContent='';
+    if(!name){err.textContent='يرجى كتابة اسم الزبون قبل إرسال الطلب.';form.querySelector('[name=name]')?.focus();return}
+    if(!rawPhone){err.textContent='يرجى كتابة رقم هاتف الزبون قبل إرسال الطلب.';form.querySelector('[name=phone]')?.focus();return}
+    if(!isValidCustomerPhone(phone)){err.textContent='يرجى كتابة رقم هاتف صحيح (من 8 إلى 15 رقمًا).';form.querySelector('[name=phone]')?.focus();return}
+    if(rawWhatsapp&&!isValidCustomerPhone(wa)){err.textContent='رقم واتساب الزبون غير صحيح. راجعه أو اتركه فارغًا.';form.querySelector('[name=whatsapp]')?.focus();return}
+    const lines=cartLines().map(p=>({product_id:String(p.id),quantity:p.qty}));
+    if(!lines.length){err.textContent='السلة فارغة؛ أضف منتجًا قبل المتابعة.';return}
+    store.uiBusy=true;btn.disabled=true;
+    try{
+      const {data,error}=await db.rpc('joker_place_order',{
+        p_customer_name:name,p_customer_phone:phone,p_customer_whatsapp:wa,
+        p_address:address,p_notes:notes,p_lines:lines
+      });
+      if(error)throw error;
+      if(!data?.id||!Array.isArray(data.items))throw Error('لم يصل تأكيد حفظ الطلب');
+      const order={id:String(data.id),name,phone,whatsapp:wa,address,notes,total:pnum(data.total),items:data.items,assignedWhatsapp:chooseOrderReceiver()};
+      store.cart={};persistCart();updateCounts();confirmOrder(order);
+    }catch(ex){
+      const visible=$('orderError');if(visible)visible.textContent=ex.message||'تعذر حفظ الطلب. لا تُرسل رسالة واتساب قبل التأكد من تسجيل الطلب.';
+      btn.disabled=false;
+    }finally{store.uiBusy=false}
+  };
+}
 $('close').onclick=closeModal;$('shade').onclick=e=>{if(e.target===$('shade'))closeModal()};document.onkeydown=e=>{if(e.key==='Escape')closeModal()};
 $('browse').onclick=()=>$('shop').scrollIntoView({behavior:'smooth'});$('goDeals').onclick=()=>$('featuredOffers').scrollIntoView({behavior:'smooth'});
 $('search').oninput=renderProducts;$('sort').onchange=renderProducts;$('cartBtn').onclick=renderCart;
