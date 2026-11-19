@@ -40,8 +40,8 @@
   function reset(){setAttempts(0);wasError='';pending=false;}
   // Existing owner and employee flows both update #loginError after a failed authentication.
   // Count confirmed invalid-credentials messages only, never network/timeouts or blank inputs.
-  const isCredentialError=(text)=>/(اسم المستخدم أو الرقم السري غير صحيح|Invalid login credentials|invalid credentials|Invalid username or password|الحساب غير مخوّل|غير مخوّل أو معطّل)/i.test(text);
-  document.addEventListener('submit',event=>{
+  const isCredentialError=(text)=>/(اسم المستخدم أو الرقم السري غير صحيح|اسم المستخدم أو كلمة المرور غير صحيحة|(?:اسم المستخدم|الرقم السري|كلمة المرور|رمز الدخول).{0,45}(?:غير صحيح|غير صحيحة|خاطئ|خاطئة|غير موجود|غير صالحة|غير صالح|غير معروف)|(?:غير صحيح|غير صحيحة|خاطئ|خاطئة).{0,45}(?:اسم المستخدم|الرقم السري|كلمة المرور)|invalid(?: login)? credentials|invalid username or password|invalid (?:pin|password)|incorrect (?:pin|password|username)|wrong (?:pin|password|username)|الحساب غير مخوّل|غير مخوّل أو معطّل|اكتب اسم مستخدم صحيحًا ورقمًا سريًا من 4 إلى 6 أرقام)/i.test(text);
+  window.addEventListener('submit',event=>{
     if(event.target?.id==='loginForm'){pending=true;wasError='';}
   },true);
   const watch=new MutationObserver(()=>{

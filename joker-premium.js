@@ -74,7 +74,8 @@
     parent.innerHTML=options.map(m=>`<button type="button" data-jp-mode="${m.id}" class="jp-mode ${S.mode===m.id?'jp-active':''}" aria-pressed="${S.mode===m.id}"><span>${m.icon}</span><small>${m.label}</small></button>`).join('');
   }
   function gamePrice(g){return g.pricing_type==='fixed'?money(g.price):'السعر حسب الطلب'}
-  function gameSize(g){const n=g?.game_size_gb==null?null:Number(g.game_size_gb);return n!=null&&Number.isFinite(n)&&n>0?String(n)+' جيجا':'';}
+  function gameSizeNumber(g){const n=g?.game_size_gb==null?null:Number(g.game_size_gb);return n!=null&&Number.isFinite(n)&&n>0?String(n):'';}
+  function gameSize(g){const n=gameSizeNumber(g);return n?n+' جيجابايت':'';}
   function isNew(g){return new Date(g.created_at).getTime()>Date.now()-14*86400000;}
   function modeInfo(mode){return MODES.find(m=>m.id===mode)||{id:'standard',icon:'🎮',label:'نسخة PS3'};}
   function platformOrder(id){return ['PS3','PS4','PS5'].indexOf(id);}
@@ -109,7 +110,7 @@
     const selectedPlatform=S.platform==='all'?(S.cardPlatforms.get(group.key)||g.platform):S.platform;
     const currentVariants=group.variants.filter(v=>v.platform===selectedPlatform);
     const variants=currentVariants.length?currentVariants:group.variants;
-    const displaySize=gameSize(variants.find(v=>gameSize(v)));
+    const displaySize=gameSizeNumber(variants.find(v=>gameSizeNumber(v)));
     const uniqueModes=new Map();
     variants.forEach(v=>{if(!uniqueModes.has(v.game_mode))uniqueModes.set(v.game_mode,v)});
     const choices=['standard','offline','online','modified'].filter(m=>uniqueModes.has(m));
@@ -131,7 +132,7 @@
       <div class="jp-game-info"><h3>${esc(group.title)}</h3>
         <div class="jp-game-sub">${featured?'⭐ ترشيحات الجوكر · ':''}${fresh?'🆕 وصل حديثًا':'🎮 متوفر للاستفسار'}</div>
         ${deviceBar}
-        ${displaySize?`<div class="jp-smart-game-size">💾 حجم اللعبة على ${esc(selectedPlatform)}: <strong>${esc(displaySize)}</strong></div>`:''}
+        ${displaySize?`<div class="jp-smart-game-size" dir="rtl"><span class="jp-game-size-label">💾 حجم اللعبة على <bdi dir="ltr">${esc(selectedPlatform)}</bdi></span><span class="jp-game-size-value"><bdi dir="ltr">${esc(displaySize)}</bdi> <span>جيجابايت</span></span></div>`:''}
         <div class="jp-smart-label">خيارات ${esc(selectedPlatform)} — اضغط على النوع لمعرفة سعره</div>
         <div class="jp-smart-modes jp-smart-modes-with-price" role="group" aria-label="نوع تشغيل اللعبة والسعر">${modeButtons}</div>
         <div class="jp-smart-selected">النسخة المختارة: <strong>${esc(g.platform)} · ${esc(modeInfo(g.game_mode).label)}</strong></div>
@@ -371,8 +372,8 @@
       container.innerHTML=chosen.length?chosen.map(platform=>{
         const modes=[...(group?.variants.some(g=>g.platform===platform&&g.game_mode==='standard')?['standard']:[]),...MODES_ALLOWED];
         return `<div class="jp-variant-device"><h4>🎮 ${platform}</h4>
-          <label class="jp-variant-price-label">💾 حجم اللعبة على ${platform} (اختياري)
-            <input type="number" min="0.01" max="9999" step="0.01" inputmode="decimal" placeholder="مثال: 85 — اتركها فارغة إذا لم تعرف" data-jp-size="${platform}" value="${esc(sizeDraft.get(platform)??'')}"> جيجا</label>
+          <div class="jp-size-editor" dir="rtl"><label for="jp-size-${esc(platform)}">💾 حجم اللعبة على <bdi dir="ltr">${esc(platform)}</bdi> (اختياري)</label>
+            <div class="jp-size-entry"><input id="jp-size-${esc(platform)}" type="number" min="0.01" max="9999" step="0.01" inputmode="decimal" placeholder="مثال: 10.8" aria-label="أدخل حجم اللعبة بالأرقام فقط" data-jp-size="${platform}" value="${esc(sizeDraft.get(platform)??'')}"><span>جيجابايت</span></div></div>
           ${modes.map(mode=>{
           const key=pairKey(platform,mode),v=draftValues.get(key);
           const checked=v?.checked??(mode==='offline'&&!modes.some(m=>draftValues.get(pairKey(platform,m))?.checked));
