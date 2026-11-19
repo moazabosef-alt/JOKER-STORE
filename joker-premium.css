@@ -62,3 +62,168 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   transform: none !important;
   will-change: auto !important;
 }
+
+
+/* JOKER V5.5 — Images never overflow or cover product/game titles. */
+.product,
+.jp-game {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* A fixed 1:1 picture frame regardless of the original image dimensions. */
+.product .pic,
+.jp-game .jp-game-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: auto !important;
+  aspect-ratio: 1 / 1;
+  flex: 0 0 auto;
+  overflow: hidden !important;
+  isolation: isolate;
+  background: radial-gradient(circle at 50% 38%, #46303c, #17131a 74%);
+}
+/* Contain = preserve the complete picture instead of zooming or cropping. */
+.product .pic img,
+.product .pic .productPhoto,
+.jp-game .jp-game-art img {
+  display: block !important;
+  position: static;
+  box-sizing: border-box;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  padding: 9px;
+  margin: 0 !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  transform: none !important;
+  filter: none;
+  background: transparent !important;
+}
+/* Offer and favourite badges remain above the image, but inside its frame. */
+.product .pic .off,
+.product .pic .heart,
+.product .pic .dealFlag,
+.jp-game .jp-game-art .jp-chip { z-index: 2; }
+.product .details,
+.jp-game .jp-game-info {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  background: linear-gradient(155deg, #271c23, #1c151c);
+}
+.product .details h3,
+.jp-game .jp-game-info h3 {
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-height: 1.4;
+}
+/* Console illustrations also stay inside their own tiles. */
+.jp-console { overflow: hidden; }
+.jp-console img {
+  object-fit: contain !important;
+  max-width: 100% !important;
+  max-height: 190px;
+}
+.jp-console:hover img { transform: none !important; }
+
+/* JOKER V5.5 — The exact existing category filters are now first after hero. */
+#jokerCategories {
+  margin: 22px 0 35px;
+  padding: 24px 22px;
+  border: 1px solid #985c53;
+  border-radius: 23px;
+  background: linear-gradient(135deg, #321c26, #1b151d 63%, #301b24);
+  box-shadow: 0 15px 38px #0006;
+}
+#jokerCategories .joker-categories-eyebrow {
+  color: #edc17d;
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+#jokerCategories h2 {
+  color: #ffdfa3;
+  margin: 3px 0 4px;
+  font-size: clamp(23px,3.2vw,31px);
+}
+#jokerCategories .joker-categories-heading p:last-child {
+  margin: 0;
+  color: #d8c0c2;
+  font-size: 13px;
+}
+#jokerCategories #categories {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 11px;
+  margin: 18px 0 0;
+}
+#jokerCategories #categories .chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 90px;
+  padding: 11px 9px;
+  margin: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.35;
+  font-size: 13px;
+  font-weight: 800;
+  color: #f9e8dd;
+  background: linear-gradient(155deg, #3e2630, #211921);
+  border: 1px solid #77535b;
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 #ffffff12;
+  transition: background .18s, border-color .18s;
+}
+#jokerCategories #categories .chip::before {
+  content: attr(data-joker-icon);
+  display: block;
+  font-size: 25px;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+#jokerCategories #categories .chip:is(:hover,:focus-visible) {
+  border-color: #f3ba7b;
+  background: #53313b;
+  outline-offset: 2px;
+}
+#jokerCategories #categories .chip.active {
+  color: #26191a;
+  border-color: #ffde9e;
+  background: linear-gradient(135deg, #ffe4ad, #ce954e);
+}
+@media (max-width: 850px) {
+  #jokerCategories #categories { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+@media (max-width: 650px) {
+  #jokerCategories { margin: 15px 0 25px; padding: 18px 12px; }
+  #jokerCategories #categories { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px; }
+  #jokerCategories #categories .chip { min-height: 84px; padding: 10px 6px; font-size: 12px; }
+  #jokerCategories #categories .chip::before { font-size: 23px; margin-bottom: 6px; }
+  .product .pic img,
+  .product .pic .productPhoto,
+  .jp-game .jp-game-art img { padding: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #jokerCategories #categories .chip { transition: none; }
+}
+
+
+/* JOKER V5.6 — Private management: never advertise admin controls to guests.
+ * Access is protected by verified Supabase staff/owner auth, NOT by CSS. */
+#adminBtn[hidden], #notify[hidden] { display: none !important; }
