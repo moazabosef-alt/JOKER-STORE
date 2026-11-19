@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "JOKER STORE | متجر الجوكر",
+  "short_name": "JOKER STORE",
+  "description": "متجر الجوكر للألعاب والإلكترونيات — ألعاب PS3 وPS4 وPS5 ومنتجات وعروض واستفسارات.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#151013",
+  "theme_color": "#151013",
+  "icons": [
+    {
+      "src": "assets/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
