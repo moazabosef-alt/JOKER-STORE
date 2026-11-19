@@ -245,3 +245,15 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   .features { grid-template-columns: 1fr; }
 }
 
+
+/* JOKER V5.13 | Arabic-first game size, with a separate number-only field */
+.jp-smart-game-size{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;direction:rtl;padding:11px 12px;border:1px solid rgba(236,188,110,.55);border-radius:14px}
+.jp-game-size-label{font-weight:800;line-height:1.8;unicode-bidi:isolate}
+.jp-game-size-value{display:inline-flex;align-items:center;gap:5px;direction:rtl;padding:8px 12px;border-radius:10px;background:rgba(235,185,103,.12);border:1px solid rgba(235,185,103,.65);font-weight:900;line-height:1.5;white-space:nowrap;unicode-bidi:isolate}
+.jp-game-size-value bdi{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+.jp-size-editor{display:flex;flex-direction:column;gap:8px;margin:12px 0 15px;padding:12px;border:1px solid rgba(236,188,110,.35);border-radius:12px}
+.jp-size-editor>label{display:block;font-weight:800;line-height:1.7}
+.jp-size-entry{display:flex;align-items:center;gap:9px;flex-wrap:wrap;direction:rtl}
+.jp-size-entry input{flex:1 1 105px;min-width:0;max-width:230px;direction:ltr;text-align:center;font-variant-numeric:tabular-nums}
+.jp-size-entry span{display:inline-flex;align-items:center;justify-content:center;padding:7px 11px;border-radius:9px;background:rgba(235,185,103,.12);border:1px solid rgba(235,185,103,.4);font-weight:800;white-space:nowrap}
+@media(max-width:380px){.jp-game-size-label,.jp-game-size-value{width:100%}.jp-size-entry input{max-width:none}}
