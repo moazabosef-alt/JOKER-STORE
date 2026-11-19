@@ -561,3 +561,61 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();
+
+
+/* JOKER V5.12 — Public UI cleanup + load ORIGINAL security warning (unchanged).
+   Keep #goAdmin in the DOM: app.js assigns an onclick to it.
+   The top navigation #adminBtn is intentionally kept visible to everyone.
+*/
+(function jokerPublicUiSecurityV512(){
+  'use strict';
+
+  function ensureStylesheet(id, path) {
+    if (document.getElementById(id)) return;
+    if ([...document.querySelectorAll('link[rel="stylesheet"]')]
+         .some(el => (el.getAttribute('href') || '').split(/[?#]/)[0] === path)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = path;
+    document.head.appendChild(link);
+  }
+
+  function ensureOriginalWarning() {
+    if (window.JokerSecurityWarning) return;
+    if (document.querySelector('script[data-joker-original-security]')) return;
+    if ([...document.scripts].some(el => /(?:^|\/)joker-security-warning\.js(?:[?#].*)?$/.test(el.getAttribute('src') || ''))) return;
+    const script = document.createElement('script');
+    script.src = 'joker-security-warning.js';
+    script.dataset.jokerOriginalSecurity = 'true';
+    script.onerror = () => console.error('JOKER: original security warning file did not load');
+    document.head.appendChild(script);
+  }
+
+  function hidePublicStaffControls() {
+    // Must remain in DOM because the older app.js uses #goAdmin without a null check.
+    const heroAdmin = document.getElementById('goAdmin');
+    if (heroAdmin) {
+      heroAdmin.hidden = true;
+      heroAdmin.setAttribute('aria-hidden', 'true');
+      heroAdmin.tabIndex = -1;
+    }
+    for (const card of document.querySelectorAll('.features > .feature')) {
+      if (card.querySelector('strong')?.textContent?.trim() === 'صلاحيات الموظفين') {
+        card.hidden = true;
+        card.setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+
+  function boot() {
+    ensureStylesheet('joker-security-warning-style-v512', 'joker-security-warning.css');
+    ensureStylesheet('joker-social-style-v512', 'joker-socials.css');
+    hidePublicStaffControls();
+    ensureOriginalWarning();
+  }
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', boot, {once:true});
+  else boot();
+})();
+

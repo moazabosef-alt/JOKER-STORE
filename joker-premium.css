@@ -227,3 +227,21 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 /* JOKER V5.6 — Private management: never advertise admin controls to guests.
  * Access is protected by verified Supabase staff/owner auth, NOT by CSS. */
 #adminBtn[hidden], #notify[hidden] { display: none !important; }
+
+
+/* JOKER V5.12 — Public storefront only: hide duplicate management access.
+   The original #adminBtn in the top navigation remains visible and functional. */
+.hero .herocta #goAdmin,
+.hero #goAdmin {
+  display: none !important;
+}
+.features > .feature:nth-child(3) {
+  display: none !important;
+}
+.features {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 650px) {
+  .features { grid-template-columns: 1fr; }
+}
+
