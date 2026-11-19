@@ -1,4 +1,4 @@
-/* JOKER STORE PREMIUM V5.3 (clean game gallery + device-aware pricing)
+/* JOKER STORE PREMIUM V5.4 (optional game size in GB per console)
  * General gallery: single cover, available console badges, no prices.
  * Choose device: jump to the same game inside that console's priced catalog.
  * Retains the V5.2 multi-console editor and optional per-variant pricing.
@@ -74,6 +74,7 @@
     parent.innerHTML=options.map(m=>`<button type="button" data-jp-mode="${m.id}" class="jp-mode ${S.mode===m.id?'jp-active':''}" aria-pressed="${S.mode===m.id}"><span>${m.icon}</span><small>${m.label}</small></button>`).join('');
   }
   function gamePrice(g){return g.pricing_type==='fixed'?money(g.price):'السعر حسب الطلب'}
+  function gameSize(g){const n=g?.game_size_gb==null?null:Number(g.game_size_gb);return n!=null&&Number.isFinite(n)&&n>0?String(n)+' جيجا':'';}
   function isNew(g){return new Date(g.created_at).getTime()>Date.now()-14*86400000;}
   function modeInfo(mode){return MODES.find(m=>m.id===mode)||{id:'standard',icon:'🎮',label:'نسخة PS3'};}
   function platformOrder(id){return ['PS3','PS4','PS5'].indexOf(id);}
@@ -108,6 +109,7 @@
     const selectedPlatform=S.platform==='all'?(S.cardPlatforms.get(group.key)||g.platform):S.platform;
     const currentVariants=group.variants.filter(v=>v.platform===selectedPlatform);
     const variants=currentVariants.length?currentVariants:group.variants;
+    const displaySize=gameSize(variants.find(v=>gameSize(v)));
     const uniqueModes=new Map();
     variants.forEach(v=>{if(!uniqueModes.has(v.game_mode))uniqueModes.set(v.game_mode,v)});
     const choices=['standard','offline','online','modified'].filter(m=>uniqueModes.has(m));
@@ -129,6 +131,7 @@
       <div class="jp-game-info"><h3>${esc(group.title)}</h3>
         <div class="jp-game-sub">${featured?'⭐ ترشيحات الجوكر · ':''}${fresh?'🆕 وصل حديثًا':'🎮 متوفر للاستفسار'}</div>
         ${deviceBar}
+        ${displaySize?`<div class="jp-smart-game-size">💾 حجم اللعبة على ${esc(selectedPlatform)}: <strong>${esc(displaySize)}</strong></div>`:''}
         <div class="jp-smart-label">خيارات ${esc(selectedPlatform)} — اضغط على النوع لمعرفة سعره</div>
         <div class="jp-smart-modes jp-smart-modes-with-price" role="group" aria-label="نوع تشغيل اللعبة والسعر">${modeButtons}</div>
         <div class="jp-smart-selected">النسخة المختارة: <strong>${esc(g.platform)} · ${esc(modeInfo(g.game_mode).label)}</strong></div>
@@ -192,6 +195,7 @@
     .jp-smart-card .jp-smart-modes-with-price{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
     .jp-smart-card .jp-smart-modes-with-price .jp-smart-mode{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;text-align:start;min-width:0;min-height:49px;border-radius:10px}
     .jp-smart-card .jp-smart-mode-price{display:block;color:#ffda95;font-size:10px;font-weight:800;line-height:1.4;white-space:normal}
+    .jp-smart-card .jp-smart-game-size{padding:7px 9px;margin:7px 0;border-radius:10px;background:#1c2028aa;border:1px solid #87673f;color:#f9e4c2;font-size:12px;line-height:1.5}
     .jp-smart-card .jp-smart-mode.jp-active .jp-smart-mode-price{color:#fff5ca}
     .jp-smart-platform-static{margin:8px 0 4px;color:#ffe0a1;background:#35222b;border:1px solid #704a52;padding:7px 10px;border-radius:8px;font-weight:800;font-size:12px}
     .jp-multi-platforms{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 14px}
@@ -290,13 +294,13 @@
     qa('[data-jp-go-platform]',q('#jpDialogBody')).forEach(button=>button.onclick=()=>goToGameOnDevice(group.key,button.dataset.jpGoPlatform));
   }
   function openDetails(g){const m=MODES.find(x=>x.id===g.game_mode)?.label||'ألعاب PS3';openDialog('🎮 تفاصيل اللعبة',
-    `<div class="jp-panel">${g.image_url?`<img src="${esc(g.image_url)}" alt="${esc(g.title)}" style="max-height:250px;width:100%;object-fit:contain">`:''}<h3>${esc(g.title)}</h3><p>الجهاز: ${esc(g.platform)} | النوع: ${esc(m)}</p><p>${esc(g.description)}</p><strong>${esc(gamePrice(g))}</strong></div><button type="button" class="jp-btn" id="jpDetailAdd">إضافة إلى قائمة طلب الألعاب</button>`);
+    `<div class="jp-panel">${g.image_url?`<img src="${esc(g.image_url)}" alt="${esc(g.title)}" style="max-height:250px;width:100%;object-fit:contain">`:''}<h3>${esc(g.title)}</h3><p>الجهاز: ${esc(g.platform)} | النوع: ${esc(m)}</p>${gameSize(g)?`<p>💾 حجم اللعبة: ${esc(gameSize(g))}</p>`:''}<p>${esc(g.description)}</p><strong>${esc(gamePrice(g))}</strong></div><button type="button" class="jp-btn" id="jpDetailAdd">إضافة إلى قائمة طلب الألعاب</button>`);
     q('#jpDetailAdd').onclick=()=>{S.inquiryIds.add(g.id);persistList();renderGames();openBasket()};}
-  function openBasket(){const items=[...S.inquiryIds].map(id=>S.games.find(g=>g.id===id)).filter(Boolean);const content=items.length?items.map(g=>`<div class="jp-admin-row"><span><strong>${esc(g.title)}</strong><br><small>${esc(g.platform)} · ${esc(MODES.find(m=>m.id===g.game_mode)?.label||'PS3')} · ${esc(gamePrice(g))}</small></span><button class="jp-btn jp-outline" data-jp-remove="${esc(g.id)}">إزالة</button></div>`).join(''):'<p class="jp-muted">قائمة طلب الألعاب فارغة.</p>';
+  function openBasket(){const items=[...S.inquiryIds].map(id=>S.games.find(g=>g.id===id)).filter(Boolean);const content=items.length?items.map(g=>`<div class="jp-admin-row"><span><strong>${esc(g.title)}</strong><br><small>${esc(g.platform)} · ${esc(MODES.find(m=>m.id===g.game_mode)?.label||'PS3')} · ${esc(gamePrice(g))}${gameSize(g)?' · '+esc(gameSize(g)):''}</small></span><button class="jp-btn jp-outline" data-jp-remove="${esc(g.id)}">إزالة</button></div>`).join(''):'<p class="jp-muted">قائمة طلب الألعاب فارغة.</p>';
     openDialog('💬 قائمة الاستفسار عن الألعاب',`${content}<div class="jp-panel"><label for="jpSendPhone">رقم التواصل الذي تريد مراسلته</label><select id="jpSendPhone">${WHATSAPP.map((n,i)=>`<option value="${n.value}">${n.label}</option>`).join('')}</select><p class="jp-footnote">يفتح واتساب برسالة جاهزة؛ يلزم الزبون الضغط على إرسال داخل واتساب. لا تُرسل الرسائل تلقائيًا.</p><button type="button" class="jp-btn" id="jpSendInquiry" ${items.length?'':'disabled'}>فتح واتساب لإرسال الاستفسار</button></div>`);
     qa('[data-jp-remove]',q('#jpDialogBody')).forEach(b=>b.onclick=()=>{S.inquiryIds.delete(b.dataset.jpRemove);persistList();renderGames();openBasket()});
     const send=q('#jpSendInquiry');if(send)send.onclick=()=>{const list=[...S.inquiryIds].map(id=>S.games.find(x=>x.id===id)).filter(Boolean);if(!list.length)return;
-      const lines=list.map((g,i)=>`${i+1}- ${g.title} | ${g.platform} | ${MODES.find(m=>m.id===g.game_mode)?.label||'PS3'} | ${gamePrice(g)}`).join('\n');
+      const lines=list.map((g,i)=>`${i+1}- ${g.title} | ${g.platform} | ${MODES.find(m=>m.id===g.game_mode)?.label||'PS3'} | ${gamePrice(g)}${gameSize(g)?' | الحجم: '+gameSize(g):''}`).join('\n');
       const txt=`السلام عليكم، نبي نستفسر ونطلب الألعاب التالية من متجر الجوكر:\n${lines}\nهل متوفرة؟ ونبي تأكيد الأسعار الحالية وطريقة الاستلام. شكرًا.`;
       window.open(`https://wa.me/${q('#jpSendPhone').value}?text=${encodeURIComponent(txt)}`,'_blank','noopener,noreferrer');};}
   async function uploadFile(file,prefix){if(!file||!file.size)return null;
@@ -318,7 +322,7 @@
         const b=document.createElement('button');b.type='button';b.id='jpManage';b.className='jp-manager-launch';b.textContent='🎨 ألعاب وخلفيات';b.onclick=openManager;parent.insertBefore(b,parent.firstChild);}
     }catch(e){console.warn('Premium owner check:',e?.message||e);}}
   const MODES_ALLOWED=['offline','online','modified'];
-  // Each saved option still has its own DB row/id and can have a separate optional price.
+  // Each saved option still has its own DB row/id, price, and optional per-console game size.
   // One cover upload is shared across the selected console/mode combinations.
   function pairKey(platform,mode){return platform+'|'+mode;}
   function groupFromKey(key){return groupGames(S.games).find(g=>g.key===key)||null;}
@@ -329,7 +333,7 @@
     const example=group?.variants.find(v=>v.available)||group?.variants[0]||draft||{};
     const known=group?new Set(group.variants.filter(v=>v.available).map(g=>g.platform)):new Set([draft?.platform||'PS4']);
     const cover=defaultCover(group)||draft?.image_url||null;
-    return `<div class="jp-manager-tip">✅ اختر جهازًا أو أكثر وأنواع التشغيل المطلوبة. اترك أي خانة سعر فارغة لتظهر للزبون <strong>السعر حسب الطلب</strong>. تُرفع صورة واحدة لجميع النسخ، وتبقى أسعار كل نوع مستقلة.</div>
+    return `<div class="jp-manager-tip">✅ اختر جهازًا أو أكثر وأنواع التشغيل المطلوبة. السعر وحجم اللعبة كلاهما اختياريان؛ إن تركت الحجم فارغًا لن يظهر للزبون. تُرفع صورة واحدة لجميع النسخ، وتبقى أسعار كل نوع مستقلة.</div>
       <form id="jpGroupForm"><div class="jp-panels"><div class="jp-panel">
         <label>اسم اللعبة</label><input name="title" maxlength="150" minlength="2" required value="${esc(example.title||'')}" placeholder="مثال: GTA V">
         <label>وصف وملاحظات اللعبة</label><textarea name="description" rows="3" placeholder="وصف اللعبة ومتطلبات التشغيل">${esc(example.description||'')}</textarea>
@@ -352,9 +356,12 @@
     const group=S.editGroupKey?groupFromKey(S.editGroupKey):null;
     const draft=S.cloneDraft||null;
     const draftValues=new Map();
+    const sizeDraft=new Map();
     if(group){group.variants.forEach(g=>draftValues.set(pairKey(g.platform,g.game_mode),{checked:!!g.available,price:g.pricing_type==='fixed'&&g.price!=null?String(g.price):''}));}
     else if(draft){draftValues.set(pairKey(draft.platform,draft.game_mode),{checked:true,price:draft.pricing_type==='fixed'&&draft.price!=null?String(draft.price):''});}
-    function collect(){qa('[data-jp-variant]',form).forEach(check=>{
+    (group?.variants|| (draft?[draft]:[])).forEach(g=>{if(g.game_size_gb!=null&&Number(g.game_size_gb)>0&&!sizeDraft.has(g.platform))sizeDraft.set(g.platform,String(g.game_size_gb));});
+    function collect(){qa('[data-jp-size]',form).forEach(input=>sizeDraft.set(input.dataset.jpSize,input.value));
+      qa('[data-jp-variant]',form).forEach(check=>{
       const field=q('[data-jp-price="'+check.dataset.jpVariant+'"]',form);
       draftValues.set(check.dataset.jpVariant,{checked:check.checked,price:field?.value||''});
     });}
@@ -363,7 +370,10 @@
       const chosen=qa('[data-jp-device]:checked',form).map(ch=>ch.dataset.jpDevice);
       container.innerHTML=chosen.length?chosen.map(platform=>{
         const modes=[...(group?.variants.some(g=>g.platform===platform&&g.game_mode==='standard')?['standard']:[]),...MODES_ALLOWED];
-        return `<div class="jp-variant-device"><h4>🎮 ${platform}</h4>${modes.map(mode=>{
+        return `<div class="jp-variant-device"><h4>🎮 ${platform}</h4>
+          <label class="jp-variant-price-label">💾 حجم اللعبة على ${platform} (اختياري)
+            <input type="number" min="0.01" max="9999" step="0.01" inputmode="decimal" placeholder="مثال: 85 — اتركها فارغة إذا لم تعرف" data-jp-size="${platform}" value="${esc(sizeDraft.get(platform)??'')}"> جيجا</label>
+          ${modes.map(mode=>{
           const key=pairKey(platform,mode),v=draftValues.get(key);
           const checked=v?.checked??(mode==='offline'&&!modes.some(m=>draftValues.get(pairKey(platform,m))?.checked));
           const modeLabel=modeInfo(mode).label;
@@ -396,6 +406,12 @@
         const value=Number(item.rawPrice);
         if(!Number.isFinite(value)||value<=0||value>999999999){alertMsg('أدخل سعرًا موجبًا، أو اترك خانة السعر فارغة للاستفسار.');return;}
       }
+      const platformSizes=new Map();
+      for(const platform of targetPlatforms){const raw=(sizeDraft.get(platform)||'').trim();
+        if(raw===''){platformSizes.set(platform,null);continue;}
+        const n=Number(raw);if(!Number.isFinite(n)||n<=0||n>9999){alertMsg('حجم اللعبة يجب أن يكون رقمًا موجبًا بالجيجابايت، أو اتركه فارغًا.');return;}
+        platformSizes.set(platform,n);
+      }
       const featured=f.has('featured'),description=String(f.get('description')||'').trim();
       S.saving=true;const btn=form.querySelector('button[type=submit]');btn.disabled=true;alertMsg('جاري حفظ اللعبة وخيارات الأجهزة...');
       try{
@@ -407,6 +423,7 @@
         if(group){group.variants.forEach(old=>{
           const key=pairKey(old.platform,old.game_mode),selection=chosen.get(key),first=!covered.has(key);
           const payload={...base,available:!!selection&&first};
+          if(platformSizes.has(old.platform))payload.game_size_gb=platformSizes.get(old.platform);
           if(selection&&first){const price=selection.rawPrice===''?null:Number(selection.rawPrice);
             payload.pricing_type=price===null?'inquiry':'fixed';payload.price=price;
           }
@@ -414,7 +431,7 @@
         });}
         selections.forEach(v=>{if(covered.has(pairKey(v.platform,v.game_mode)))return;
           const price=v.rawPrice===''?null:Number(v.rawPrice);
-          inserts.push({...base,platform:v.platform,game_mode:v.game_mode,available:true,pricing_type:price===null?'inquiry':'fixed',price});
+          inserts.push({...base,platform:v.platform,game_mode:v.game_mode,game_size_gb:platformSizes.get(v.platform)??null,available:true,pricing_type:price===null?'inquiry':'fixed',price});
         });
         // Preserve record IDs so older customer inquiry lists and old links continue working.
         for(const row of updates){const {error}=await S.db.from('joker_premium_games').update(row.payload).eq('id',row.id);if(error)throw error;}
@@ -434,12 +451,12 @@
       const visible=group.variants.filter(g=>g.available);
       const platforms=[...new Set(visible.map(g=>g.platform))].sort((a,b)=>platformOrder(a)-platformOrder(b));
       const variantMarkup=group.variants.map(g=>`<div class="jp-admin-row"><span><strong>${esc(g.platform)} · ${esc(modeInfo(g.game_mode).label)}</strong><br>
-        <small>${esc(gamePrice(g))}${g.available?'':' · مخفية'}</small></span>
+        <small>${esc(gamePrice(g))}${gameSize(g)?' · حجم: '+esc(gameSize(g)):''}${g.available?'':' · مخفية'}</small></span>
         <span class="jp-action-row"><button class="jp-btn jp-outline" type="button" data-jp-edit-variant="${esc(g.id)}">تعديل السعر</button>
         <button class="jp-btn jp-outline" type="button" data-jp-delete="${esc(g.id)}">حذف النسخة</button></span></div>`).join('');
       return `<div class="jp-admin-game-row"><div class="jp-admin-game-head"><div><strong>${esc(group.title)}</strong>
           <div class="jp-footnote">${esc(platforms.join(' · ')||'غير معروضة')} — ${visible.length} نسخة معروضة</div></div>
-          <button class="jp-btn jp-outline" type="button" data-jp-edit-group="${esc(group.key)}">✏️ تعديل اللعبة والأجهزة والأسعار</button></div>
+          <button class="jp-btn jp-outline" type="button" data-jp-edit-group="${esc(group.key)}">✏️ تعديل اللعبة والأجهزة والأسعار والحجم</button></div>
         <details class="jp-variant-admin-list"><summary>إدارة النسخ الفردية (${group.variants.length})</summary>${variantMarkup}</details></div>`;
     }).join('');
     q('#jpAdminContent').innerHTML=`<h3>${S.editGroupKey?'✏️ تعديل لعبة بجميع أجهزتها':'➕ إضافة لعبة واحدة لعدة أجهزة'}</h3>${adminGroupTemplate()}
@@ -503,3 +520,102 @@
   function begin(){init().catch(e=>console.error('JOKER PREMIUM initialization:',e));}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',begin,{once:true});else begin();
 })();
+
+/* JOKER STORE V5.11 | Add-on-only social-link compatibility layer.
+ * Safe with both the earlier and newer index.html: it fixes existing links,
+ * or adds the social hub only if it is absent. Core app files are unchanged.
+ */
+(function jokerSocialLinksV511(){
+  'use strict';
+  const HUB_HTML="<section id=\"jokerSocialHub\" class=\"joker-social-hub\" aria-labelledby=\"jokerSocialTitle\">\n  <div class=\"joker-social-head\">\n    <div class=\"joker-social-head-copy\"><div class=\"joker-social-kicker\">✦ CONNECT WITH JOKER ELECTRONICS ✦</div><h2 id=\"jokerSocialTitle\">تابع عالم <span>الجوكر</span> 🃏</h2><p>كل جديد في عالم الألعاب والإلكترونيات والعروض — تابعنا وتواصل معنا مباشرة عبر منصاتنا الرسمية.</p></div>\n    <img class=\"joker-social-brand\" src=\"assets/logo.png\" alt=\"شعار متجر الجوكر الأصلي\" loading=\"lazy\"/>\n  </div>\n  <div class=\"joker-social-platforms\">\n    <a class=\"joker-social-platform joker-social-facebook\" href=\"https://www.facebook.com/share/1FfV4E7Q4q/\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"صفحة فيسبوك لمتجر الجوكر\"><span class=\"joker-social-ico\"><svg viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M14.6 21v-8h2.8l.4-3.3h-3.2V7.6c0-1 .3-1.6 1.6-1.6H18V3.1c-.4-.1-1.8-.1-2.5-.1-3 0-5 1.8-5 5V9.7H7.8V13h2.7v8h4.1Z\"/></svg></span><span><strong>فيسبوك</strong><small>صفحتنا الرسمية</small></span><span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span></a>\n    <a class=\"joker-social-platform joker-social-tiktok\" href=\"https://www.tiktok.com/@goker_218\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"صفحة تيك توك لمتجر الجوكر\"><span class=\"joker-social-ico\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M14 3v12.5a4.5 4.5 0 1 1-4.5-4.5\"/><path d=\"M14 3c.6 3 2.3 5 6.5 5.1V12c-3.7-.1-6-1.4-6.5-3\"/></svg></span><span><strong>تيك توك</strong><small>صفحتنا الرسمية</small></span><span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span></a>\n      <a class=\"joker-social-platform joker-social-telegram\" href=\"https://linktr.ee/Joker82025\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"فتح صفحة روابط الجوكر للوصول إلى تليجرام\">\n      <span class=\"joker-social-ico\" aria-hidden=\"true\">\n        <svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"m21.5 3.4-3.6 17.1c-.3 1.1-1 1.4-2 0.9l-5.3-3.9-2.6 2.5c-.3.3-.6.6-1.2.6l.4-5.4 9.8-8.9c.4-.4-.1-.6-.6-.2L4.1 14 0 12.7c-1-.3-1-1 .2-1.5L19.8 3c.9-.3 1.9.2 1.7.4Z\"/></svg>\n      </span><span><strong>تليجرام</strong><small>من صفحة الروابط الرسمية</small></span>\n      <span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span>\n    </a>\n    <a class=\"joker-social-platform joker-social-maps\" href=\"https://www.google.com/maps/search/?api=1&query=%D8%AC%D9%88%D9%83%D8%B1+%D9%84%D9%84%D8%A3%D8%AC%D9%87%D8%B2%D8%A9+%D8%A7%D9%84%D8%A5%D9%84%D9%83%D8%AA%D8%B1%D9%88%D9%86%D9%8A%D8%A9+%D9%88%D9%83%D9%85%D8%A7%D9%84%D9%8A%D8%A7%D8%AA%D9%87%D8%A7+%D8%B7%D8%B1%D8%A7%D8%A8%D9%84%D8%B3+%D9%84%D9%8A%D8%A8%D9%8A%D8%A7&query_place_id=ChIJDbbyVwCTqBMRmXfe0xP33OU\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"فتح موقع محل الجوكر على خرائط جوجل\">\n      <span class=\"joker-social-ico\" aria-hidden=\"true\">\n        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 10c0 5.5-8 12-8 12S4 15.5 4 10a8 8 0 1 1 16 0Z\"/><circle cx=\"12\" cy=\"10\" r=\"3\"/></svg>\n      </span><span><strong>موقع المحل 📍</strong><small>خرائط Google — الاتجاهات إلى المتجر</small></span>\n      <span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span>\n    </a>\n  </div>\n  <div class=\"joker-social-wa-heading\"><span>💬 تواصل معنا على واتساب</span><small>اختر الرقم المناسب لك</small></div>\n  <div class=\"joker-social-wa-grid\"><a class=\"joker-social-wa\" href=\"https://wa.me/218915206879\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"تواصل مع متجر الجوكر على واتساب رقم 0915206879\"><span class=\"joker-social-ico joker-social-ico-wa\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20.5 11.7a8.5 8.5 0 0 1-12.7 7.4L3 20.5l1.5-4.7A8.5 8.5 0 1 1 20.5 11.7Z\"/><path d=\"m9.2 8.1 1.2 2.4-1 1.1a8 8 0 0 0 3.2 3.1l1.1-1 2.4 1.2c.2.1.3.4.2.7-.3 1-1.2 1.5-2.2 1.4-3.8-.4-6.8-3.4-7.2-7.1-.1-1.1.5-1.9 1.4-2.2.3 0 .7.1.9.4Z\"/></svg></span><span><strong>واتساب 1</strong><small dir=\"ltr\">0915206879</small></span><span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span></a>\n<a class=\"joker-social-wa\" href=\"https://wa.me/218923319182\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"تواصل مع متجر الجوكر على واتساب رقم 0923319182\"><span class=\"joker-social-ico joker-social-ico-wa\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20.5 11.7a8.5 8.5 0 0 1-12.7 7.4L3 20.5l1.5-4.7A8.5 8.5 0 1 1 20.5 11.7Z\"/><path d=\"m9.2 8.1 1.2 2.4-1 1.1a8 8 0 0 0 3.2 3.1l1.1-1 2.4 1.2c.2.1.3.4.2.7-.3 1-1.2 1.5-2.2 1.4-3.8-.4-6.8-3.4-7.2-7.1-.1-1.1.5-1.9 1.4-2.2.3 0 .7.1.9.4Z\"/></svg></span><span><strong>واتساب 2</strong><small dir=\"ltr\">0923319182</small></span><span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span></a>\n<a class=\"joker-social-wa\" href=\"https://wa.me/218925206879\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"تواصل مع متجر الجوكر على واتساب رقم 0925206879\"><span class=\"joker-social-ico joker-social-ico-wa\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20.5 11.7a8.5 8.5 0 0 1-12.7 7.4L3 20.5l1.5-4.7A8.5 8.5 0 1 1 20.5 11.7Z\"/><path d=\"m9.2 8.1 1.2 2.4-1 1.1a8 8 0 0 0 3.2 3.1l1.1-1 2.4 1.2c.2.1.3.4.2.7-.3 1-1.2 1.5-2.2 1.4-3.8-.4-6.8-3.4-7.2-7.1-.1-1.1.5-1.9 1.4-2.2.3 0 .7.1.9.4Z\"/></svg></span><span><strong>واتساب 3</strong><small dir=\"ltr\">0925206879</small></span><span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span></a></div>\n  <div class=\"joker-social-footer\">\n    <a href=\"https://linktr.ee/Joker82025\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"joker-social-all\"><span class=\"joker-social-ico\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M10 13.5l4-4m-2.7-3 1.7-1.7a4.2 4.2 0 1 1 5.9 6l-3.2 3.1a4.2 4.2 0 0 1-5.9 0m2.9 3.2-1.7 1.7a4.2 4.2 0 0 1-5.9-6l3.2-3.1a4.2 4.2 0 0 1 5.9 0\"/></svg></span><span><strong>كل روابط الجوكر</strong><small>جميع حساباتنا في مكان واحد</small></span><span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span></a>\n    <a href=\"https://joker-store-ck6.pages.dev/\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"joker-social-site\" aria-label=\"فتح متجر الجوكر للتسوق عبر الإنترنت\"><span class=\"joker-social-ico\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M3 12h18M12 3c3.5 3.8 3.5 14.2 0 18M12 3c-3.5 3.8-3.5 14.2 0 18\"/></svg></span><span><strong>التسوق الإلكتروني</strong><small dir=\"ltr\">joker-store-ck6.pages.dev</small></span><span class=\"joker-social-arrow\" aria-hidden=\"true\">↗</span></a>\n  </div>\n</section>";
+  const LINKS={
+    facebook:'https://www.facebook.com/share/1FfV4E7Q4q/',
+    tiktok:'https://www.tiktok.com/@goker_218',
+    telegram:'https://linktr.ee/Joker82025',
+    maps:'https://www.google.com/maps/search/?api=1&query=%D8%AC%D9%88%D9%83%D8%B1+%D9%84%D9%84%D8%A3%D8%AC%D9%87%D8%B2%D8%A9+%D8%A7%D9%84%D8%A5%D9%84%D9%83%D8%AA%D8%B1%D9%88%D9%86%D9%8A%D8%A9+%D9%88%D9%83%D9%85%D8%A7%D9%84%D9%8A%D8%A7%D8%AA%D9%87%D8%A7+%D8%B7%D8%B1%D8%A7%D8%A8%D9%84%D8%B3+%D9%84%D9%8A%D8%A8%D9%8A%D8%A7&query_place_id=ChIJDbbyVwCTqBMRmXfe0xP33OU'
+  };
+  function init(){
+    if(!document.querySelector('link[href="joker-socials.css"]')){
+      const css=document.createElement('link');css.rel='stylesheet';css.href='joker-socials.css';
+      css.setAttribute('data-joker-addon','socials-v5-11');document.head.appendChild(css);
+    }
+    let hub=document.getElementById('jokerSocialHub');
+    if(!hub){
+      const template=document.createElement('template');template.innerHTML=HUB_HTML.trim();
+      hub=template.content.firstElementChild;
+      const container=document.querySelector('main.wrap')||document.querySelector('main')||document.body;
+      if(!hub||!container)return;container.appendChild(hub);
+    }
+    const setLink=(selector,url,title)=>{
+      const a=hub.querySelector(selector);if(!a)return;
+      a.href=url;a.target='_blank';a.rel='noopener noreferrer';
+      if(title)a.setAttribute('aria-label',title);
+    };
+    setLink('.joker-social-facebook',LINKS.facebook,'صفحة متجر الجوكر على فيسبوك');
+    setLink('.joker-social-tiktok',LINKS.tiktok,'حساب متجر الجوكر على تيك توك');
+    setLink('.joker-social-telegram',LINKS.telegram,'روابط متجر الجوكر للوصول إلى تليجرام');
+    setLink('.joker-social-maps',LINKS.maps,'موقع محل الجوكر على خرائط Google');
+    const fb=hub.querySelector('.joker-social-facebook small');if(fb)fb.textContent='صفحتنا على فيسبوك';
+    const tt=hub.querySelector('.joker-social-tiktok small');if(tt)tt.textContent='حسابنا على تيك توك';
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
+})();
+
+
+/* JOKER V5.12 — Public UI cleanup + load ORIGINAL security warning (unchanged).
+   Keep #goAdmin in the DOM: app.js assigns an onclick to it.
+   The top navigation #adminBtn is intentionally kept visible to everyone.
+*/
+(function jokerPublicUiSecurityV512(){
+  'use strict';
+
+  function ensureStylesheet(id, path) {
+    if (document.getElementById(id)) return;
+    if ([...document.querySelectorAll('link[rel="stylesheet"]')]
+         .some(el => (el.getAttribute('href') || '').split(/[?#]/)[0] === path)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = path;
+    document.head.appendChild(link);
+  }
+
+  function ensureOriginalWarning() {
+    if (window.JokerSecurityWarning) return;
+    if (document.querySelector('script[data-joker-original-security]')) return;
+    if ([...document.scripts].some(el => /(?:^|\/)joker-security-warning\.js(?:[?#].*)?$/.test(el.getAttribute('src') || ''))) return;
+    const script = document.createElement('script');
+    script.src = 'joker-security-warning.js';
+    script.dataset.jokerOriginalSecurity = 'true';
+    script.onerror = () => console.error('JOKER: original security warning file did not load');
+    document.head.appendChild(script);
+  }
+
+  function hidePublicStaffControls() {
+    // Must remain in DOM because the older app.js uses #goAdmin without a null check.
+    const heroAdmin = document.getElementById('goAdmin');
+    if (heroAdmin) {
+      heroAdmin.hidden = true;
+      heroAdmin.setAttribute('aria-hidden', 'true');
+      heroAdmin.tabIndex = -1;
+    }
+    for (const card of document.querySelectorAll('.features > .feature')) {
+      if (card.querySelector('strong')?.textContent?.trim() === 'صلاحيات الموظفين') {
+        card.hidden = true;
+        card.setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+
+  function boot() {
+    ensureStylesheet('joker-security-warning-style-v512', 'joker-security-warning.css');
+    ensureStylesheet('joker-social-style-v512', 'joker-socials.css');
+    hidePublicStaffControls();
+    ensureOriginalWarning();
+  }
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', boot, {once:true});
+  else boot();
+})();
+
