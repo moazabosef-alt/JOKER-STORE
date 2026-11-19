@@ -1,4 +1,4 @@
-/* JOKER STORE PREMIUM V5 (single integrated visual & games enhancement)
+/* JOKER STORE PREMIUM V5.2 (unified games, multi-console editor, optional per-mode pricing)
  * Existing app.js, product/cart/order handlers and staff auth stay untouched.
  * Public reads and owner-only writes use database RLS on new tables.
  */
@@ -17,8 +17,9 @@
   const MODES = [{id:'offline',icon:'📴',label:'أوفلاين',english:'Offline'},
                  {id:'online',icon:'🌐',label:'أونلاين',english:'Online'},
                  {id:'modified',icon:'🛠️',label:'أجهزة معدلة',english:'Modified'}];
-  const S = {db:null,games:[],categories:[],backgrounds:new Map(),platform:'PS4',mode:'offline',search:'',
-             currentAdminTab:'games',currentBackground:'hero',editId:null,cloneImage:'',isOwner:false,
+  const S = {db:null,games:[],categories:[],backgrounds:new Map(),platform:'all',mode:'all',search:'',
+             selectedVariants:new Map(),cardPlatforms:new Map(),
+             currentAdminTab:'games',currentBackground:'hero',editId:null,cloneImage:'',editGroupKey:null,cloneDraft:null,focusVariant:null,isOwner:false,
              inquiryIds:new Set(),saving:false,selectedSlide:0,slidesTimer:0};
   const prefMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   function safeList(){try {const a=JSON.parse(localStorage.getItem('joker_v5_games_list')||'[]');return Array.isArray(a)?a.filter(x=>typeof x==='string'):[]}catch{return []}}
@@ -48,41 +49,176 @@
       el.style.transform=`translate3d(0,${offset.toFixed(1)}px,0)`;});});}
   function deviceButtons(){return DEVICES.map(d=>`<button type="button" class="jp-console ${S.platform===d.id?'jp-selected':''}" data-jp-platform="${d.id}" data-platform="${d.id}" aria-pressed="${S.platform===d.id}">
     <img src="${d.img}" loading="lazy" alt="مجسم ثلاثي الأبعاد لجهاز ${d.label}"><b>${d.label}</b><span>استكشف ألعاب ${d.id}</span></button>`).join('');}
+  // Smart Cards V5.1: combine by normalized title for display only.
+  // Underlying Supabase rows, pricing, images, owners and order identifiers remain unchanged.
+  function gameKey(title){return String(title||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase();}
+  function groupGames(rows){const byName=new Map();
+    rows.forEach(g=>{const key=gameKey(g.title);if(!key)return;
+      if(!byName.has(key))byName.set(key,{key,title:g.title,variants:[]});
+      byName.get(key).variants.push(g);
+    });
+    return [...byName.values()];
+  }
+  function allVisibleGroups(){return groupGames(S.games.filter(g=>g.available));}
   function renderModes(){const parent=q('#jpModeWrap');if(!parent)return;
-    parent.innerHTML=S.platform==='PS3'?'<div class="jp-scroll-pill">🎮 جميع ألعاب PS3</div>':MODES.map(m=>`<button type="button" data-jp-mode="${m.id}" class="jp-mode ${S.mode===m.id?'jp-active':''}" aria-pressed="${S.mode===m.id}"><span>${m.icon}</span><small>${m.label}</small></button>`).join('');}
+    if(S.platform==='all'){
+      parent.innerHTML='<span class="jp-scroll-pill">🕹️ جميع المنصات — صورة واحدة لكل لعبة، مهما تعددت نسخها</span>';return;
+    }
+    if(S.platform==='PS3'){
+      parent.innerHTML='<span class="jp-scroll-pill">🎮 جميع ألعاب PS3</span>';return;
+    }
+    const options=[{id:'all',icon:'🎮',label:'كل الأنواع'},...MODES];
+    parent.innerHTML=options.map(m=>`<button type="button" data-jp-mode="${m.id}" class="jp-mode ${S.mode===m.id?'jp-active':''}" aria-pressed="${S.mode===m.id}"><span>${m.icon}</span><small>${m.label}</small></button>`).join('');
+  }
   function gamePrice(g){return g.pricing_type==='fixed'?money(g.price):'السعر حسب الطلب'}
   function isNew(g){return new Date(g.created_at).getTime()>Date.now()-14*86400000;}
-  function gameCard(g){const mode=MODES.find(m=>m.id===g.game_mode),badge=mode?.label||'PS3';return `<article class="jp-game">
-    <div class="jp-game-art">${g.image_url?`<img src="${esc(g.image_url)}" alt="غلاف لعبة ${esc(g.title)}" loading="lazy" onerror="this.replaceWith(document.createTextNode('🎮'))">`:'<span class="jp-art-fallback" aria-hidden="true">🎮</span>'}
-      <span class="jp-chip">${esc(g.platform)} · ${esc(badge)}</span></div>
-    <div class="jp-game-info"><h3>${esc(g.title)}</h3>
-      <div class="jp-game-sub">${g.featured?'⭐ ترشيحات الجوكر · ':''}${isNew(g)?'🆕 وصل حديثًا':'🎮 متوفر للاستفسار'}</div>
-      <div class="jp-game-price">${esc(gamePrice(g))}</div>
-      <div class="jp-game-buttons"><button type="button" class="jp-btn" data-jp-add="${esc(g.id)}">${g.pricing_type==='fixed'?'🛍️ اطلب اللعبة':'💬 استفسر عن السعر'}</button>
-      <button type="button" class="jp-btn jp-outline" data-jp-details="${esc(g.id)}" aria-label="تفاصيل اللعبة">تفاصيل</button></div>
-    </div></article>`;}
-  function filteredGames(){return S.games.filter(g=>g.available && g.platform===S.platform && (S.platform==='PS3'||g.game_mode===S.mode)
-    && (!S.search || (g.title+' '+(g.description||'')).toLowerCase().includes(S.search.toLowerCase())));}
+  function modeInfo(mode){return MODES.find(m=>m.id===mode)||{id:'standard',icon:'🎮',label:'نسخة PS3'};}
+  function platformOrder(id){return ['PS3','PS4','PS5'].indexOf(id);}
+  function currentVariant(group){
+    const platform=S.platform==='all'?(S.cardPlatforms.get(group.key)||null):S.platform;
+    let scope=platform?group.variants.filter(g=>g.platform===platform):group.variants;
+    if(!scope.length)scope=group.variants;
+    if(S.platform!=='all' && S.mode!=='all'){
+      const modeScope=scope.filter(g=>g.game_mode===S.mode);
+      if(modeScope.length)scope=modeScope;
+    }
+    return scope.find(g=>g.id===S.selectedVariants.get(group.key))||scope[0]||null;
+  }
+  function gameCard(group){
+    const g=currentVariant(group);if(!g)return '';
+    const platforms=[...new Set(group.variants.map(v=>v.platform))].sort((a,b)=>platformOrder(a)-platformOrder(b));
+    const selectedPlatform=S.platform==='all'?(S.cardPlatforms.get(group.key)||g.platform):S.platform;
+    const currentVariants=group.variants.filter(v=>v.platform===selectedPlatform);
+    const variants=currentVariants.length?currentVariants:group.variants;
+    const uniqueModes=new Map();
+    variants.forEach(v=>{if(!uniqueModes.has(v.game_mode))uniqueModes.set(v.game_mode,v)});
+    const choices=['standard','offline','online','modified'].filter(m=>uniqueModes.has(m));
+    const cover=g.image_url||group.variants.find(v=>v.image_url)?.image_url;
+    const featured=group.variants.some(v=>v.featured),fresh=group.variants.some(isNew);
+    const badgePlatforms=S.platform==='all'?platforms:[S.platform];
+    const deviceBar=S.platform==='all'
+      ?`<div class="jp-smart-label">الأجهزة المتوفرة</div><div class="jp-smart-devices" role="group" aria-label="اختر جهاز اللعبة">${platforms.map(platform=>`<button type="button" class="jp-smart-platform ${selectedPlatform===platform?'jp-active':''}" data-jp-pick-platform="${platform}" aria-pressed="${selectedPlatform===platform}">${platform}</button>`).join('')}</div>`
+      :`<div class="jp-smart-platform-static">🎮 ألعاب ${esc(S.platform)}</div>`;
+    const modeButtons=choices.map(mode=>{
+      const v=uniqueModes.get(mode),m=modeInfo(mode),active=g.id===v.id;
+      return `<button type="button" class="jp-smart-mode ${active?'jp-active':''}" data-jp-pick-mode="${mode}" aria-pressed="${active}" title="اختر ${esc(m.label)}">
+        <span class="jp-smart-mode-name">${m.icon} ${esc(m.label)}</span><span class="jp-smart-mode-price">${esc(gamePrice(v))}</span>
+      </button>`;
+    }).join('');
+    return `<article class="jp-game jp-smart-card" data-jp-game-key="${esc(group.key)}">
+      <div class="jp-game-art">${cover?`<img src="${esc(cover)}" alt="غلاف لعبة ${esc(group.title)}" loading="lazy" onerror="this.replaceWith(document.createTextNode('🎮'))">`:'<span class="jp-art-fallback" aria-hidden="true">🎮</span>'}
+        <span class="jp-chip jp-smart-cover-badge">${badgePlatforms.map(esc).join(' · ')}</span></div>
+      <div class="jp-game-info"><h3>${esc(group.title)}</h3>
+        <div class="jp-game-sub">${featured?'⭐ ترشيحات الجوكر · ':''}${fresh?'🆕 وصل حديثًا':'🎮 متوفر للاستفسار'}</div>
+        ${deviceBar}
+        <div class="jp-smart-label">خيارات ${esc(selectedPlatform)} — اضغط على النوع لمعرفة سعره</div>
+        <div class="jp-smart-modes jp-smart-modes-with-price" role="group" aria-label="نوع تشغيل اللعبة والسعر">${modeButtons}</div>
+        <div class="jp-smart-selected">النسخة المختارة: <strong>${esc(g.platform)} · ${esc(modeInfo(g.game_mode).label)}</strong></div>
+        <div class="jp-game-price">${esc(gamePrice(g))}</div>
+        <div class="jp-game-buttons"><button type="button" class="jp-btn" data-jp-add="${esc(g.id)}">${g.pricing_type==='fixed'?'🛍️ اطلب هذه النسخة':'💬 استفسر عن هذه النسخة'}</button>
+          <button type="button" class="jp-btn jp-outline" data-jp-details="${esc(g.id)}" aria-label="تفاصيل النسخة المحددة">تفاصيل</button></div>
+      </div></article>`;
+  }
+  function activeGroups(){
+    const phrase=S.search.toLowerCase();
+    return allVisibleGroups().map(group=>({...group,variants:S.platform==='all'?group.variants:group.variants.filter(g=>g.platform===S.platform)}))
+      .filter(group=>group.variants.length>0)
+      .filter(group=>S.mode==='all'||group.variants.some(g=>g.game_mode===S.mode))
+      .filter(group=>!phrase||(group.title+' '+group.variants.map(g=>g.description||'').join(' ')).toLowerCase().includes(phrase));
+  }
   function renderGames(){const root=q('#jpGamesGrid');if(!root)return;
-    qa('[data-jp-platform]').forEach(b=>{b.classList.toggle('jp-selected',b.dataset.jpPlatform===S.platform);b.setAttribute('aria-pressed',String(b.dataset.jpPlatform===S.platform));});
-    renderModes();const items=filteredGames();root.innerHTML=items.length?items.map(gameCard).join(''):'<div class="jp-empty">🎮 لا توجد ألعاب معروضة في هذا التصنيف حاليًا. تابعنا، الألعاب الجديدة تُضاف هنا.</div>';
-    const count=q('#jpCount');if(count)count.textContent=items.length+' لعبة';
-    const selected=S.games.filter(x=>x.available&&x.featured).slice(0,12),featured=q('#jpFeatured');
-    if(featured){featured.innerHTML=selected.length?selected.map(gameCard).join(''):'<div class="jp-empty">ستظهر هنا الألعاب التي يختارها المدير ضمن ترشيحات الجوكر.</div>';}
-    const newGames=S.games.filter(x=>x.available&&isNew(x)).slice(0,12),latest=q('#jpLatest');
-    if(latest)latest.innerHTML=newGames.length?newGames.map(gameCard).join(''):'<div class="jp-empty">ستظهر هنا الألعاب التي تُضاف حديثًا.</div>';
-    const c=q('#jpInquiryCounter');if(c)c.textContent=S.inquiryIds.size;}
-  function gameSection(){const section=document.createElement('section');section.id='jokerPremiumGames';section.className='jp-genre';section.innerHTML=`
+    qa('[data-jp-platform]').forEach(b=>{const isSelected=b.dataset.jpPlatform===S.platform;
+      b.classList.toggle('jp-selected',isSelected);b.setAttribute('aria-pressed',String(isSelected));
+    });
+    renderModes();const groups=activeGroups();
+    root.innerHTML=groups.length?groups.map(gameCard).join(''):'<div class="jp-empty">🎮 لا توجد ألعاب معروضة في هذا التصنيف حاليًا. جرّب جميع الأنواع أو منصة أخرى.</div>';
+    const count=q('#jpCount');if(count)count.textContent=groups.length+' لعبة';
+    const platformGroups=allVisibleGroups().map(group=>({...group,variants:S.platform==='all'?group.variants:group.variants.filter(g=>g.platform===S.platform)})).filter(group=>group.variants.length);
+    const favorites=platformGroups.filter(group=>group.variants.some(v=>v.featured)).slice(0,12),featured=q('#jpFeatured');
+    if(featured)featured.innerHTML=favorites.length?favorites.map(gameCard).join(''):'<div class="jp-empty">ستظهر هنا الألعاب التي يختارها المدير ضمن ترشيحات الجوكر.</div>';
+    const latest=platformGroups.filter(group=>group.variants.some(isNew)).slice(0,12),latestNode=q('#jpLatest');
+    if(latestNode)latestNode.innerHTML=latest.length?latest.map(gameCard).join(''):'<div class="jp-empty">ستظهر هنا الألعاب التي تُضاف حديثًا.</div>';
+    const counter=q('#jpInquiryCounter');if(counter)counter.textContent=S.inquiryIds.size;
+  }
+  function installSmartStyles(){if(q('#jpSmartCardStyles'))return;
+    const style=document.createElement('style');style.id='jpSmartCardStyles';style.textContent=`
+    .jp-all-devices-row{display:flex;justify-content:center;margin:8px auto 13px}
+    .jp-all-devices-btn{border:1px solid #9d7354;border-radius:999px;padding:12px 28px;color:#ffe4b5;background:#26181c;cursor:pointer;font-weight:800;box-shadow:0 6px 20px #0004;transition:.2s}
+    .jp-all-devices-btn.jp-selected,.jp-all-devices-btn:hover{background:linear-gradient(120deg,#75402b,#3a1520);border-color:#f4c87d;color:#fff;box-shadow:0 0 0 2px #c08b4540}
+    .jp-smart-card .jp-game-info{min-width:0}
+    .jp-smart-card .jp-smart-label{font-weight:700;color:#efc992;font-size:11px;margin-top:9px;margin-bottom:5px}
+    .jp-smart-card .jp-smart-devices,.jp-smart-card .jp-smart-modes{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+    .jp-smart-card .jp-smart-platform,.jp-smart-card .jp-smart-mode{border:1px solid #665057;background:#241b22;border-radius:8px;color:#eedcce;font-size:11px;font-weight:750;padding:7px 8px;cursor:pointer;line-height:1.25;transition:border-color .18s,background .18s;white-space:normal}
+    .jp-smart-card .jp-smart-platform.jp-active,.jp-smart-card .jp-smart-mode.jp-active{border-color:#f6c877;background:#6f422f;color:#fff;box-shadow:inset 0 0 0 1px #fac88a38}
+    .jp-smart-card .jp-smart-platform:focus-visible,.jp-smart-card .jp-smart-mode:focus-visible,.jp-all-devices-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+    .jp-smart-card .jp-smart-cover-badge{max-width:calc(100% - 12px);white-space:normal;text-align:center;line-height:1.4;word-break:normal;font-size:11px}
+    .jp-smart-card .jp-smart-selected{font-size:11px;color:#e8d5c8;margin-top:10px;padding:7px 8px;border-radius:7px;background:#38232c;line-height:1.5}
+    .jp-smart-card .jp-smart-selected strong{color:#ffe0a1}
+    .jp-smart-card .jp-game-price{margin-top:8px}
+    .jp-smart-card .jp-game-buttons{margin-top:9px}
+    .jp-smart-card .jp-game-buttons .jp-btn{white-space:normal}
+    .jp-smart-card .jp-smart-modes-with-price{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    .jp-smart-card .jp-smart-modes-with-price .jp-smart-mode{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;text-align:start;min-width:0;min-height:49px;border-radius:10px}
+    .jp-smart-card .jp-smart-mode-price{display:block;color:#ffda95;font-size:10px;font-weight:800;line-height:1.4;white-space:normal}
+    .jp-smart-card .jp-smart-mode.jp-active .jp-smart-mode-price{color:#fff5ca}
+    .jp-smart-platform-static{margin:8px 0 4px;color:#ffe0a1;background:#35222b;border:1px solid #704a52;padding:7px 10px;border-radius:8px;font-weight:800;font-size:12px}
+    .jp-multi-platforms{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 14px}
+    .jp-multi-platforms label{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#302029;border:1px solid #806168;border-radius:10px;color:#ffe0a1;font-weight:800;cursor:pointer}
+    .jp-multi-platforms input{accent-color:#e6b45d;width:17px;height:17px}
+    .jp-variants-box{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:10px;margin:9px 0 16px}
+    .jp-variant-device{border:1px solid #7b5b61;background:#251922;border-radius:12px;padding:12px;min-width:0}
+    .jp-variant-device h4{margin:0 0 9px;color:#ffe0a1;font-size:15px}
+    .jp-variant-entry{display:grid;grid-template-columns:1fr;gap:4px;border-bottom:1px solid #65434a66;padding:8px 0}
+    .jp-variant-entry:last-child{border-bottom:0}
+    .jp-variant-entry .jp-variant-check{display:flex;gap:8px;align-items:center;color:#fff;font-weight:700;font-size:13px}
+    .jp-variant-entry input[type="checkbox"]{accent-color:#e6b45d;width:17px;height:17px}
+    .jp-variant-entry .jp-variant-price-label{display:flex;gap:7px;align-items:center;color:#f2d3bb;font-size:12px;flex-wrap:wrap}
+    .jp-variant-entry .jp-variant-price-label input{width:130px;max-width:100%;padding:7px 9px;border-radius:7px;background:#1b141b;border:1px solid #745960;color:#fff;direction:ltr}
+    .jp-variant-entry .jp-variant-price-label input:disabled{opacity:.35}
+    .jp-variant-admin-list{margin:8px 0;padding:8px 0;border-top:1px dashed #725258}
+    .jp-variant-admin-list summary{cursor:pointer;color:#f8d4a1;font-weight:700}
+    .jp-variant-admin-list .jp-admin-row{margin:6px 0}
+    .jp-admin-game-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .jp-admin-game-head .jp-btn{flex-shrink:0}
+    .jp-admin-game-row{border:1px solid #68424c;padding:12px;background:#231820;border-radius:12px;margin:9px 0}
+    .jp-manager-tip{background:#32232c;border-inline-start:3px solid #e8bc7c;padding:12px;border-radius:8px;color:#fae6d6;line-height:1.7;font-size:12px}
+    @media(max-width:700px){.jp-smart-card .jp-smart-platform,.jp-smart-card .jp-smart-mode{font-size:10px;padding:6px 7px}.jp-all-devices-btn{width:min(100%,320px)}.jp-smart-card .jp-smart-label{font-size:10px}.jp-variants-box{grid-template-columns:1fr}.jp-multi-platforms label{padding:7px 9px;font-size:12px}}
+    @media(max-width:500px){.jp-game-grid{grid-template-columns:1fr!important}.jp-game-grid .jp-smart-card .jp-game-art{height:190px}.jp-smart-card .jp-smart-modes-with-price{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    `;document.head.append(style);
+  }
+  function gameSection(){installSmartStyles();const section=document.createElement('section');section.id='jokerPremiumGames';section.className='jp-genre';section.innerHTML=`
     <div class="jp-header"><div><div class="jp-kicker">✦ JOKER GAME ZONE ✦</div><h2 class="jp-title">🎮 عالم <em>ألعاب البلايستيشن</em></h2><p class="jp-muted">PS3 • PS4 • PS5 — صور الألعاب، خيارات التشغيل، والسعر الحالي حسب الطلب</p></div><button class="jp-scroll-pill" id="jpOpenBasket" type="button">💬 قائمة طلب الألعاب (<span id="jpInquiryCounter">0</span>)</button></div>
-    <div class="jp-consoles">${deviceButtons()}</div><div class="jp-modes" id="jpModeWrap"></div>
+    <div class="jp-consoles">${deviceButtons()}</div>
+    <div class="jp-all-devices-row"><button type="button" class="jp-all-devices-btn jp-selected" data-jp-platform="all" aria-pressed="true">🕹️ عرض جميع الألعاب بدون تكرار</button></div>
+    <div class="jp-modes" id="jpModeWrap"></div>
     <div class="jp-game-toolbar"><strong id="jpCount">0 لعبة</strong><input class="jp-search" id="jpSearch" type="search" placeholder="ابحث عن لعبة بالاسم..." aria-label="ابحث عن لعبة"></div>
     <div class="jp-game-grid" id="jpGamesGrid"><div class="jp-empty">جاري تحميل ألعاب الجوكر...</div></div>
     <div class="jp-carousel-wrap"><div class="jp-carousel-label">🔥 ترشيحات الجوكر <div class="jp-action-row"><button type="button" class="jp-btn jp-outline" data-jp-scroll="featured:-1">❯</button><button type="button" class="jp-btn jp-outline" data-jp-scroll="featured:1">❮</button></div></div><div class="jp-featured" id="jpFeatured"></div></div>
     <div class="jp-carousel-wrap"><div class="jp-carousel-label">🆕 وصل حديثًا</div><div class="jp-featured" id="jpLatest"></div></div>
     <p class="jp-footnote">الأسعار المتغيرة يتم تأكيدها عند الاستفسار. جميع الرسائل تُفتح في واتساب ليؤكد الزبون إرسالها.</p>`;
     const shop=q('#shop'),offers=q('#featuredOffers');if(shop)shop.before(section);else if(offers)offers.after(section);else q('main')?.append(section);
-    section.addEventListener('click',e=>{const device=e.target.closest('[data-jp-platform]');if(device){S.platform=device.dataset.jpPlatform;S.mode='offline';S.search='';q('#jpSearch').value='';renderGames();return;}
+    section.addEventListener('click',e=>{const device=e.target.closest('[data-jp-platform]');if(device){
+        S.platform=device.dataset.jpPlatform;S.mode='all';S.search='';q('#jpSearch').value='';renderGames();
+        q('#jpGamesGrid')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
       const mode=e.target.closest('[data-jp-mode]');if(mode){S.mode=mode.dataset.jpMode;renderGames();return;}
+      const selectedPlatform=e.target.closest('[data-jp-pick-platform]');if(selectedPlatform){
+        const card=selectedPlatform.closest('[data-jp-game-key]');
+        const group=allVisibleGroups().find(g=>g.key===card?.dataset.jpGameKey);if(!group)return;
+        const requested=selectedPlatform.dataset.jpPickPlatform,current=currentVariant(group);
+        const variants=group.variants.filter(g=>g.platform===requested);
+        const next=variants.find(g=>g.game_mode===current.game_mode)||variants[0];if(!next)return;
+        S.cardPlatforms.set(group.key,requested);S.selectedVariants.set(group.key,next.id);
+        if(S.mode!=='all'&&S.mode!==next.game_mode)S.mode='all';renderGames();return;}
+      const selectedMode=e.target.closest('[data-jp-pick-mode]');if(selectedMode){
+        const card=selectedMode.closest('[data-jp-game-key]');
+        const group=allVisibleGroups().find(g=>g.key===card?.dataset.jpGameKey);if(!group)return;
+        const requested=selectedMode.dataset.jpPickMode;
+        const explicit=S.platform==='all'?S.cardPlatforms.get(group.key):S.platform;
+        const current=currentVariant(group);
+        const candidates=group.variants.filter(g=>g.game_mode===requested&&(!explicit||g.platform===explicit));
+        const next=candidates.find(g=>g.platform===current.platform)||candidates[0];if(!next)return;
+        S.selectedVariants.set(group.key,next.id);if(S.platform==='all')S.cardPlatforms.set(group.key,next.platform);
+        if(S.mode!=='all'&&S.mode!==requested)S.mode='all';renderGames();return;}
       const add=e.target.closest('[data-jp-add]');if(add){const g=S.games.find(x=>x.id===add.dataset.jpAdd);if(g){S.inquiryIds.add(g.id);persistList();renderGames();openBasket();}return;}
       const details=e.target.closest('[data-jp-details]');if(details){const g=S.games.find(x=>x.id===details.dataset.jpDetails);if(g)openDetails(g);return;}
       const scroll=e.target.closest('[data-jp-scroll]');if(scroll){const [where,sign]=scroll.dataset.jpScroll.split(':');q(where==='featured'?'#jpFeatured':'#jpLatest')?.scrollBy({left:Number(sign)*230,behavior:'smooth'});return;}});
@@ -121,59 +257,147 @@
         const b=document.createElement('button');b.type='button';b.id='jpManage';b.className='jp-manager-launch';b.textContent='🎨 ألعاب وخلفيات';b.onclick=openManager;parent.insertBefore(b,parent.firstChild);}
     }catch(e){console.warn('Premium owner check:',e?.message||e);}}
   const MODES_ALLOWED=['offline','online','modified'];
-  function formTemplate(game){const edit=!!game;const platform=game?.platform||'PS4';const mode=game?.game_mode||'offline';
-    return `<form id="jpGameForm"><div class="jp-panels"><div class="jp-panel">
-    <label>اسم اللعبة</label><input name="title" maxlength="150" required minlength="2" value="${esc(game?.title||'')}" placeholder="مثال: GTA V">
-    <label>الجهاز</label><select name="platform" id="jpGamePlatform">${DEVICES.map(d=>`<option value="${d.id}" ${d.id===platform?'selected':''}>${d.label}</option>`).join('')}</select>
-    <label>نوع التشغيل ${edit?'(تعديل النسخة المحددة)':'(يمكن اختيار أكثر من نوع)'}</label><div class="jp-checks" id="jpGameModes"></div>
-    <label>وصف وملاحظات</label><textarea name="description" rows="3" placeholder="معلومات اللعبة ومتطلبات التشغيل">${esc(game?.description||'')}</textarea>
-    </div><div class="jp-panel"><label>طريقة عرض السعر</label><select name="pricing_type" id="jpPriceType"><option value="inquiry" ${game?.pricing_type!=='fixed'?'selected':''}>السعر حسب الطلب</option><option value="fixed" ${game?.pricing_type==='fixed'?'selected':''}>سعر ثابت</option></select>
-    <label>السعر بالدينار الليبي</label><input name="price" id="jpGamePrice" type="number" step=".01" min="0.01" value="${game?.price??''}" placeholder="يُترك فارغًا للسعر حسب الطلب">
-    <label>صورة غلاف اللعبة (حتى 5 MB)</label><input name="photo" type="file" accept="image/jpeg,image/png,image/webp">
-    ${game?.image_url?`<p class="jp-footnote">الصورة الحالية ستبقى إذا لم ترفع صورة جديدة.</p>`:''}
-    <div class="jp-checks"><label><input type="checkbox" name="available" ${game?.available!==false?'checked':''}>متوفرة للعرض</label><label><input type="checkbox" name="featured" ${game?.featured?'checked':''}>⭐ مميزة</label></div>
-    <p class="jp-footnote">${edit?'تعديل هذه النسخة فقط، ولن يتأثر تكرارها في أنواع أخرى.':'اختر عدة أنماط، وستُحفظ كل نسخة كسجل مستقل بنفس الصورة.'}</p></div></div>
-    <div class="jp-action-row"><button class="jp-btn" type="submit">${edit?'💾 حفظ التعديل':'➕ إضافة اللعبة'}</button><button class="jp-btn jp-outline" type="button" id="jpCancelEdit">إلغاء</button></div><p class="jp-status" id="jpStatus" role="status"></p></form>`;}
-  function refreshFormModes(existing){const type=q('#jpGamePlatform')?.value||'PS4',el=q('#jpGameModes');if(!el)return;
-    if(type==='PS3'){el.innerHTML='<span class="jp-muted">🎮 ألعاب PS3: قسم واحد</span>';return;}
-    const selected=existing?.game_mode||'offline';el.innerHTML=MODES.map(m=>`<label><input type="checkbox" name="game_mode" value="${m.id}" ${m.id===selected?'checked':''}> ${m.icon} ${m.label}</label>`).join('');
-    if(existing){qa('input[name="game_mode"]',el).forEach(x=>x.onchange=()=>{if(x.checked)qa('input[name="game_mode"]',el).filter(y=>y!==x).forEach(y=>y.checked=false);});}}
-  function bindGameForm(game){const form=q('#jpGameForm');if(!form)return;
-    refreshFormModes(game);q('#jpGamePlatform').onchange=()=>refreshFormModes(null);q('#jpPriceType').onchange=()=>{
-      const price=q('#jpGamePrice');price.disabled=q('#jpPriceType').value==='inquiry';if(price.disabled)price.value='';};q('#jpPriceType').onchange();
-    q('#jpCancelEdit').onclick=()=>{S.editId=null;S.cloneImage='';openManager('games')};
-    form.onsubmit=async e=>{e.preventDefault();if(S.saving)return;const f=new FormData(form);
-      const platform=String(f.get('platform')),modes=platform==='PS3'?['standard']:f.getAll('game_mode').filter(m=>MODES_ALLOWED.includes(m));
-      if(modes.length===0){alertMsg('اختر نوع تشغيل واحدًا على الأقل.');return;}
-      if(S.editId&&modes.length!==1){alertMsg('عند تعديل نسخة موجودة، اختر نوعًا واحدًا فقط.');return;}
-      const pricing_type=String(f.get('pricing_type'));const price=pricing_type==='fixed'?Number(f.get('price')):null;
-      if(pricing_type==='fixed'&&(!Number.isFinite(price)||price<=0)){alertMsg('اكتب سعرًا ثابتًا أكبر من صفر.');return;}
-      const base={title:String(f.get('title')||'').trim(),platform,description:String(f.get('description')||'').trim(),pricing_type,price,
-        featured:f.has('featured'),available:f.has('available')};if(base.title.length<2){alertMsg('اكتب اسم اللعبة.');return;}
-      S.saving=true;const btn=form.querySelector('button[type=submit]');btn.disabled=true;alertMsg('جاري حفظ اللعبة...');
-      try{const photo=f.get('photo');const old=game?.image_url||S.cloneImage||null;const image_url=(photo instanceof File&&photo.size)?await uploadFile(photo,'games'):old;
-        const rows=modes.map(game_mode=>({...base,game_mode,image_url}));
-        const req=S.editId?S.db.from('joker_premium_games').update(rows[0]).eq('id',S.editId):S.db.from('joker_premium_games').insert(rows);
-        const {error}=await req;if(error)throw error;
-        S.editId=null;S.cloneImage='';await reload();openManager('games');alertMsg('✅ تم حفظ اللعبة بنجاح.');}
-      catch(err){alertMsg('❌ تعذر حفظ اللعبة: '+(err?.message||err));btn.disabled=false;}
-      finally{S.saving=false;}
+  // Each saved option still has its own DB row/id and can have a separate optional price.
+  // One cover upload is shared across the selected console/mode combinations.
+  function pairKey(platform,mode){return platform+'|'+mode;}
+  function groupFromKey(key){return groupGames(S.games).find(g=>g.key===key)||null;}
+  function defaultCover(group){return group?.variants.find(v=>v.image_url)?.image_url||null;}
+  function adminGroupTemplate(){
+    const group=S.editGroupKey?groupFromKey(S.editGroupKey):null;
+    const draft=S.cloneDraft||null;
+    const example=group?.variants.find(v=>v.available)||group?.variants[0]||draft||{};
+    const known=group?new Set(group.variants.filter(v=>v.available).map(g=>g.platform)):new Set([draft?.platform||'PS4']);
+    const cover=defaultCover(group)||draft?.image_url||null;
+    return `<div class="jp-manager-tip">✅ اختر جهازًا أو أكثر وأنواع التشغيل المطلوبة. اترك أي خانة سعر فارغة لتظهر للزبون <strong>السعر حسب الطلب</strong>. تُرفع صورة واحدة لجميع النسخ، وتبقى أسعار كل نوع مستقلة.</div>
+      <form id="jpGroupForm"><div class="jp-panels"><div class="jp-panel">
+        <label>اسم اللعبة</label><input name="title" maxlength="150" minlength="2" required value="${esc(example.title||'')}" placeholder="مثال: GTA V">
+        <label>وصف وملاحظات اللعبة</label><textarea name="description" rows="3" placeholder="وصف اللعبة ومتطلبات التشغيل">${esc(example.description||'')}</textarea>
+        <label>اختر أجهزة البلايستيشن (جهاز أو أكثر)</label>
+        <div class="jp-multi-platforms">${DEVICES.map(d=>`<label><input type="checkbox" data-jp-device="${d.id}" ${known.has(d.id)?'checked':''}> ${d.id}</label>`).join('')}</div>
+        <label>صورة غلاف اللعبة (ملف واحد لجميع الأجهزة والأنواع)</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp">
+        ${cover?`<p class="jp-footnote">📷 الصورة الحالية محفوظة، وإذا لم ترفع صورة جديدة ستبقى كما هي.</p>`:''}
+      </div><div class="jp-panel"><label>خيارات العرض</label>
+        <div class="jp-checks"><label><input type="checkbox" name="featured" ${example.featured?'checked':''}> ⭐ لعبة مميزة في ترشيحات الجوكر</label></div>
+        <p class="jp-footnote">لكل جهاز اختر أوفلاين وأونلاين وأجهزة معدلة حسب المتوفر، ويمكن تحديد أكثر من خيار. كل نوع له سعر مستقل أو خانة فارغة للاستفسار.</p>
+        <p class="jp-footnote">${group?'التعديل على المجموعة يحدث البيانات المشتركة، ويُخفي النسخ التي تلغي تحديدها دون حذفها من قاعدة البيانات.':'عند الحفظ، ينشئ المتجر جميع الاختيارات بضغطة واحدة دون تكرار رفع الصورة.'}</p>
+      </div></div>
+      <div class="jp-variants-box" id="jpVariantMatrix"></div>
+      <div class="jp-action-row"><button class="jp-btn" type="submit">${group?'💾 حفظ تعديل اللعبة وجميع النسخ':'➕ إضافة اللعبة للأجهزة المختارة'}</button>
+      <button class="jp-btn jp-outline" id="jpCancelEdit" type="button">إلغاء / إضافة لعبة جديدة</button></div>
+      <p class="jp-status" id="jpStatus" role="status"></p></form>`;
+  }
+  function bindGroupForm(){
+    const form=q('#jpGroupForm');if(!form)return;
+    const group=S.editGroupKey?groupFromKey(S.editGroupKey):null;
+    const draft=S.cloneDraft||null;
+    const draftValues=new Map();
+    if(group){group.variants.forEach(g=>draftValues.set(pairKey(g.platform,g.game_mode),{checked:!!g.available,price:g.pricing_type==='fixed'&&g.price!=null?String(g.price):''}));}
+    else if(draft){draftValues.set(pairKey(draft.platform,draft.game_mode),{checked:true,price:draft.pricing_type==='fixed'&&draft.price!=null?String(draft.price):''});}
+    function collect(){qa('[data-jp-variant]',form).forEach(check=>{
+      const field=q('[data-jp-price="'+check.dataset.jpVariant+'"]',form);
+      draftValues.set(check.dataset.jpVariant,{checked:check.checked,price:field?.value||''});
+    });}
+    function renderMatrix(){
+      const container=q('#jpVariantMatrix');if(!container)return;
+      const chosen=qa('[data-jp-device]:checked',form).map(ch=>ch.dataset.jpDevice);
+      container.innerHTML=chosen.length?chosen.map(platform=>{
+        const modes=[...(group?.variants.some(g=>g.platform===platform&&g.game_mode==='standard')?['standard']:[]),...MODES_ALLOWED];
+        return `<div class="jp-variant-device"><h4>🎮 ${platform}</h4>${modes.map(mode=>{
+          const key=pairKey(platform,mode),v=draftValues.get(key);
+          const checked=v?.checked??(mode==='offline'&&!modes.some(m=>draftValues.get(pairKey(platform,m))?.checked));
+          const modeLabel=modeInfo(mode).label;
+          return `<div class="jp-variant-entry"><label class="jp-variant-check"><input type="checkbox" data-jp-variant="${key}" ${checked?'checked':''}>
+            ${esc(modeLabel)}${mode==='standard'?' (نسخة PS3 القديمة)':''}</label>
+            <label class="jp-variant-price-label">السعر (اختياري)<input type="number" min="0.01" max="999999999" step="0.01" inputmode="decimal" placeholder="فارغ = السعر حسب الطلب" data-jp-price="${key}" value="${esc(v?.price??'')}" ${checked?'':'disabled'}> د.ل</label></div>`;
+        }).join('')}</div>`;
+      }).join(''):'<div class="jp-empty">اختر جهازًا واحدًا على الأقل لإظهار أنواع التشغيل وأسعارها.</div>';
+      qa('[data-jp-variant]',form).forEach(ch=>ch.onchange=()=>{
+        const price=q('[data-jp-price="'+ch.dataset.jpVariant+'"]',form);if(price)price.disabled=!ch.checked;
+      });
+    }
+    qa('[data-jp-device]',form).forEach(ch=>ch.onchange=()=>{collect();renderMatrix()});
+    renderMatrix();
+    q('#jpCancelEdit').onclick=()=>{S.editGroupKey=null;S.cloneDraft=null;S.focusVariant=null;openManager('games');};
+    if(S.focusVariant){const focused=q('[data-jp-price="'+S.focusVariant+'"]',form);
+      if(focused){focused.scrollIntoView({block:'center',behavior:'smooth'});focused.focus({preventScroll:true});}}
+    form.onsubmit=async e=>{
+      e.preventDefault();if(S.saving)return;collect();
+      const f=new FormData(form),title=String(f.get('title')||'').trim();
+      if(title.length<2||title.length>150){alertMsg('اسم اللعبة يجب أن يتكون من حرفين إلى 150 حرفًا.');return;}
+      const targetPlatforms=qa('[data-jp-device]:checked',form).map(ch=>ch.dataset.jpDevice);
+      const selections=[...draftValues.entries()]
+        .filter(([key,v])=>v.checked&&targetPlatforms.includes(key.split('|')[0]))
+        .map(([key,v])=>{const [platform,game_mode]=key.split('|');return {platform,game_mode,rawPrice:v.price.trim()};});
+      if(!selections.length){alertMsg('اختر جهازًا ونوع تشغيل واحدًا على الأقل.');return;}
+      const newKey=gameKey(title),existingOther=groupGames(S.games).find(g=>g.key===newKey && g.key!==S.editGroupKey);
+      if(existingOther){alertMsg('هذه اللعبة موجودة بالفعل. استخدم زر «تعديل اللعبة» لإضافة الأجهزة والأنواع إلى نفس الصورة.');return;}
+      for(const item of selections){if(item.rawPrice==='')continue;
+        const value=Number(item.rawPrice);
+        if(!Number.isFinite(value)||value<=0||value>999999999){alertMsg('أدخل سعرًا موجبًا، أو اترك خانة السعر فارغة للاستفسار.');return;}
+      }
+      const featured=f.has('featured'),description=String(f.get('description')||'').trim();
+      S.saving=true;const btn=form.querySelector('button[type=submit]');btn.disabled=true;alertMsg('جاري حفظ اللعبة وخيارات الأجهزة...');
+      try{
+        const file=f.get('photo');let image_url=defaultCover(group)||draft?.image_url||null;
+        if(file instanceof File&&file.size)image_url=await uploadFile(file,'games');
+        const base={title,description,featured,image_url};
+        const chosen=new Map(selections.map(v=>[pairKey(v.platform,v.game_mode),v]));
+        const covered=new Set(),updates=[],inserts=[];
+        if(group){group.variants.forEach(old=>{
+          const key=pairKey(old.platform,old.game_mode),selection=chosen.get(key),first=!covered.has(key);
+          const payload={...base,available:!!selection&&first};
+          if(selection&&first){const price=selection.rawPrice===''?null:Number(selection.rawPrice);
+            payload.pricing_type=price===null?'inquiry':'fixed';payload.price=price;
+          }
+          updates.push({id:old.id,payload});covered.add(key);
+        });}
+        selections.forEach(v=>{if(covered.has(pairKey(v.platform,v.game_mode)))return;
+          const price=v.rawPrice===''?null:Number(v.rawPrice);
+          inserts.push({...base,platform:v.platform,game_mode:v.game_mode,available:true,pricing_type:price===null?'inquiry':'fixed',price});
+        });
+        // Preserve record IDs so older customer inquiry lists and old links continue working.
+        for(const row of updates){const {error}=await S.db.from('joker_premium_games').update(row.payload).eq('id',row.id);if(error)throw error;}
+        if(inserts.length){const {error}=await S.db.from('joker_premium_games').insert(inserts);if(error)throw error;}
+        S.editGroupKey=null;S.cloneDraft=null;S.focusVariant=null;
+        await reload();openManager('games');alertMsg('✅ تم الحفظ بنجاح. ستظهر اللعبة بصورة واحدة في كل الأقسام المناسبة.');
+      }catch(err){
+        // DB requests are performed in separate calls; refresh after a partial failure.
+        try{await reload()}catch{}
+        alertMsg('❌ تعذر إكمال الحفظ: '+(err?.message||err)+' — راجع قائمة الألعاب قبل إعادة المحاولة.');btn.disabled=false;
+      }finally{S.saving=false;}
     };
   }
-  function gameAdmin(){const edit=S.games.find(x=>x.id===S.editId)||null;
-    const intro='<p class="jp-muted">أضف اللعبة مرة واحدة واختر أوفلاين وأونلاين ومعدلة. كل نسخة مستقلة ويمكن تغيير سعرها لاحقًا. ألعاب PS3 تظهر في قسم واحد.</p>';
-    const list=S.games.map(g=>`<div class="jp-admin-row"><span><strong>${esc(g.title)} — ${esc(g.platform)}</strong><br><small>${esc(MODES.find(m=>m.id===g.game_mode)?.label||'PS3')} | ${esc(gamePrice(g))} ${g.available?'':'| مخفية'}</small></span><span class="jp-action-row"><button type="button" class="jp-btn jp-outline" data-jp-edit="${esc(g.id)}">تعديل</button><button type="button" class="jp-btn jp-outline" data-jp-clone="${esc(g.id)}">نسخ</button><button type="button" class="jp-btn jp-outline" data-jp-delete="${esc(g.id)}">حذف</button></span></div>`).join('');
-    q('#jpAdminContent').innerHTML=intro+formTemplate(edit)+`<h3>الألعاب المُضافة (${S.games.length})</h3><div class="jp-panel">${list||'<p class="jp-muted">لم تتم إضافة ألعاب بعد.</p>'}</div>`;
-    bindGameForm(edit);
-    qa('[data-jp-edit]').forEach(b=>b.onclick=()=>{S.editId=b.dataset.jpEdit;S.cloneImage='';openManager('games')});
-    qa('[data-jp-clone]').forEach(b=>b.onclick=()=>{const g=S.games.find(x=>x.id===b.dataset.jpClone);if(!g)return;S.editId=null;S.cloneImage=g.image_url||'';
-      openManager('games');const form=q('#jpGameForm');form.elements.title.value=g.title;form.elements.platform.value=g.platform;
-      q('#jpGamePlatform').dispatchEvent(new Event('change'));/* Existing mode is selected by default in the new form. */
-      form.elements.description.value=g.description||'';q('#jpPriceType').value=g.pricing_type;q('#jpPriceType').onchange();
-      if(g.pricing_type==='fixed')q('#jpGamePrice').value=g.price;form.elements.featured.checked=g.featured;form.elements.available.checked=g.available;
-      alertMsg('تم نسخ بيانات اللعبة. اختر الأنواع التي تبي تضيفها، ثم احفظ.');});
-    qa('[data-jp-delete]').forEach(b=>b.onclick=async()=>{const g=S.games.find(x=>x.id===b.dataset.jpDelete);if(!g||!confirm(`حذف نسخة ${g.title} (${g.platform}) من ${MODES.find(m=>m.id===g.game_mode)?.label||'PS3'}؟ لا تتأثر النسخ الأخرى.`))return;
-      const {error}=await S.db.from('joker_premium_games').delete().eq('id',g.id);if(error){alert('تعذر الحذف: '+error.message);return;}await reload();openManager('games');});}
+  function gameAdmin(){
+    const allGroups=groupGames(S.games);
+    const groupsMarkup=allGroups.map(group=>{
+      const visible=group.variants.filter(g=>g.available);
+      const platforms=[...new Set(visible.map(g=>g.platform))].sort((a,b)=>platformOrder(a)-platformOrder(b));
+      const variantMarkup=group.variants.map(g=>`<div class="jp-admin-row"><span><strong>${esc(g.platform)} · ${esc(modeInfo(g.game_mode).label)}</strong><br>
+        <small>${esc(gamePrice(g))}${g.available?'':' · مخفية'}</small></span>
+        <span class="jp-action-row"><button class="jp-btn jp-outline" type="button" data-jp-edit-variant="${esc(g.id)}">تعديل السعر</button>
+        <button class="jp-btn jp-outline" type="button" data-jp-delete="${esc(g.id)}">حذف النسخة</button></span></div>`).join('');
+      return `<div class="jp-admin-game-row"><div class="jp-admin-game-head"><div><strong>${esc(group.title)}</strong>
+          <div class="jp-footnote">${esc(platforms.join(' · ')||'غير معروضة')} — ${visible.length} نسخة معروضة</div></div>
+          <button class="jp-btn jp-outline" type="button" data-jp-edit-group="${esc(group.key)}">✏️ تعديل اللعبة والأجهزة والأسعار</button></div>
+        <details class="jp-variant-admin-list"><summary>إدارة النسخ الفردية (${group.variants.length})</summary>${variantMarkup}</details></div>`;
+    }).join('');
+    q('#jpAdminContent').innerHTML=`<h3>${S.editGroupKey?'✏️ تعديل لعبة بجميع أجهزتها':'➕ إضافة لعبة واحدة لعدة أجهزة'}</h3>${adminGroupTemplate()}
+      <h3>الألعاب المُضافة (${allGroups.length} لعبة، ${S.games.length} نسخة)</h3>
+      <div class="jp-panel">${groupsMarkup||'<p class="jp-muted">لم تتم إضافة ألعاب بعد.</p>'}</div>`;
+    bindGroupForm();
+    qa('[data-jp-edit-group]').forEach(b=>b.onclick=()=>{
+      S.editGroupKey=b.dataset.jpEditGroup;S.cloneDraft=null;S.focusVariant=null;openManager('games');
+    });
+    qa('[data-jp-edit-variant]').forEach(b=>b.onclick=()=>{
+      const g=S.games.find(x=>x.id===b.dataset.jpEditVariant);if(!g)return;
+      S.editGroupKey=gameKey(g.title);S.cloneDraft=null;S.focusVariant=pairKey(g.platform,g.game_mode);openManager('games');
+    });
+    qa('[data-jp-delete]').forEach(b=>b.onclick=async()=>{
+      const g=S.games.find(x=>x.id===b.dataset.jpDelete);if(!g||!confirm(`حذف نسخة ${g.title} من ${g.platform} (${modeInfo(g.game_mode).label}) نهائيًا؟ بقية النسخ لن تُحذف.`))return;
+      const {error}=await S.db.from('joker_premium_games').delete().eq('id',g.id);
+      if(error){alert('تعذر الحذف: '+error.message);return;}await reload();openManager('games');
+    });
+  }
   function sectionOptions(){const basic=[{key:'hero',name:'الواجهة الرئيسية'},{key:'games',name:'ألعاب البلايستيشن'},{key:'offers',name:'العروض المميزة'},{key:'shop',name:'كل المنتجات'}];return basic.concat(S.categories.map(c=>({key:'category:'+c.id,name:'القسم: '+c.name})));}
   function bgAdmin(){const options=sectionOptions();if(!options.some(x=>x.key===S.currentBackground))S.currentBackground='hero';
     const record=S.backgrounds.get(S.currentBackground)||{};
@@ -203,7 +427,7 @@
   function openManager(tab){if(!S.isOwner){alert('لوحة PREMIUM متاحة لحساب المدير العام فقط.');return;}
     S.currentAdminTab=tab==='backgrounds'?'backgrounds':'games';openDialog('🎨 إدارة ألعاب الجوكر والخلفيات',
       `<div class="jp-tabbar"><button type="button" class="jp-tab ${S.currentAdminTab==='games'?'jp-active':''}" data-jp-tab="games">🎮 إدارة الألعاب</button><button type="button" class="jp-tab ${S.currentAdminTab==='backgrounds'?'jp-active':''}" data-jp-tab="backgrounds">🖼️ خلفيات الأقسام</button></div><div id="jpAdminContent"></div>`);
-    qa('[data-jp-tab]').forEach(b=>b.onclick=()=>{S.editId=null;S.cloneImage='';openManager(b.dataset.jpTab)});
+    qa('[data-jp-tab]').forEach(b=>b.onclick=()=>{S.editId=null;S.cloneImage='';S.editGroupKey=null;S.cloneDraft=null;S.focusVariant=null;openManager(b.dataset.jpTab)});
     if(S.currentAdminTab==='games')gameAdmin();else bgAdmin();}
   async function init(){if(!cfg.supabaseUrl||!cfg.supabasePublishableKey){console.warn('JOKER PREMIUM: Supabase config missing');return;}
     const {createClient}=await import('https://esm.sh/@supabase/supabase-js@2.49.8');
