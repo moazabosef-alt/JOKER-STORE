@@ -33,7 +33,9 @@
     state.timer=setTimeout(()=>show((state.index+1)%state.slides.length),ms);
   }
   function show(next){const count=state.slides.length;if(!count)return;state.index=(next+count)%count;
-    document.querySelectorAll('.jh-slide').forEach((node,i)=>{const active=i===state.index;node.classList.toggle('is-active',active);node.setAttribute('aria-hidden',String(!active));
+    document.querySelectorAll('.jh-slide').forEach((node,i)=>{const active=i===state.index;
+      if(active){node.classList.remove('is-active');void node.offsetWidth;}
+      node.classList.toggle('is-active',active);node.setAttribute('aria-hidden',String(!active));
       node.querySelectorAll('a').forEach(a=>a.tabIndex=active?0:-1);
       const image=node.querySelector('img');if(active && image && image.loading==='lazy') image.loading='eager';
     });
@@ -53,9 +55,17 @@
     if(!state.slides.length)return;
     const carousel=document.createElement('div');carousel.className='jh-carousel';carousel.setAttribute('aria-roledescription','عرض صور متحرك');carousel.setAttribute('aria-label','عروض وواجهة متجر الجوكر');
     carousel.innerHTML=`<div class="jh-stage">${state.slides.map((s,i)=>{
-      const image=safeUrl(s.image_url); const hasCTA=Boolean(s.button_text?.trim() && s.target_type!=='none');
-      return `<article class="jh-slide ${i===0?'is-active':''}" aria-hidden="${i!==0}" data-jh-id="${esc(s.id)}">
-        <img src="${esc(image)}" alt="${esc(s.image_alt||s.title||'تصميم متجر الجوكر')}" ${i===0?'loading="eager" fetchpriority="high"':'loading="lazy"'} decoding="async">
+      const image=safeUrl(s.image_url);
+      const mobile=safeUrl(s.mobile_image_url)||image;
+      const hasCTA=Boolean(s.button_text?.trim() && s.target_type!=='none');
+      const fit=['cover','contain'].includes(s.desktop_fit)?s.desktop_fit:'cover';
+      const mfit=['cover','contain'].includes(s.mobile_fit)?s.mobile_fit:'contain';
+      const allowedPositions=['center','top','bottom','left','right'];
+      const dpos=allowedPositions.includes(s.desktop_position)?s.desktop_position:'center';
+      const mpos=allowedPositions.includes(s.mobile_position)?s.mobile_position:'center';
+      const zoom=num(s.desktop_zoom??1,1,1,1.5),mzoom=num(s.mobile_zoom??1,1,1,1.5);
+      return `<article class="jh-slide ${i===0?'is-active':''}" aria-hidden="${i!==0}" data-jh-id="${esc(s.id)}" style="--jh-desktop-fit:${fit};--jh-mobile-fit:${mfit};--jh-desktop-position:${dpos};--jh-mobile-position:${mpos};--jh-desktop-zoom:${zoom};--jh-mobile-zoom:${mzoom};--jh-desktop-bg:url('${esc(image)}');--jh-mobile-bg:url('${esc(mobile)}')">
+        <div class="jh-media"><div class="jh-media-blur" aria-hidden="true"></div><picture class="jh-picture"><source media="(max-width: 760px)" srcset="${esc(mobile)}"><img src="${esc(image)}" alt="${esc(s.image_alt||s.title||'تصميم متجر الجوكر')}" ${i===0?'loading="eager" fetchpriority="high"':'loading="lazy"'} decoding="async"></picture></div>
         <div class="jh-overlay"></div><div class="jh-slide-body"><span class="jh-kicker">✦ JOKER STORE ✦</span>
         ${s.title?`<h1 class="jh-slide-title">${esc(s.title)}</h1>`:''}
         ${s.subtitle?`<p class="jh-slide-subtitle">${esc(s.subtitle)}</p>`:''}
@@ -148,8 +158,18 @@
     const productOptions=state.products.filter(p=>p.image_url).map(p=>`<option value="${esc(p.id)}" ${slide?.target_type==='product'&&slide.target_value===String(p.id)?'selected':''}>${esc(p.name)}</option>`).join('');
     host.innerHTML=`<section class="jh-manager jh-editor" dir="rtl"><div class="jh-manager-heading"><div><span class="jh-admin-tag">JOKER SHOWCASE</span><h3>${editing?'✏️ تعديل الصورة':'🖼️ إضافة صورة للواجهة'}</h3></div><button type="button" class="outline" id="jhBack">الرجوع</button></div>
       <form id="jhSlideForm" class="jh-slide-form">
-        ${slide?.image_url?`<div class="jh-current-image"><span>الصورة الحالية</span><img src="${esc(safeUrl(slide.image_url))}" alt="معاينة التصميم"></div>`:''}
-        <label class="field"><span>صورة من الهاتف أو الكمبيوتر (اختياري عند التعديل)</span><input type="file" name="photo" accept="image/jpeg,image/png,image/webp"><small>مناسب للصورة العرضية 1920×800. يمكنك استعمال صورة المنتج تلقائياً بدلاً من الرفع.</small></label>
+        <div class="jh-dual-intro">📱🖥️ لكل سلايد صورتان: نسخة للكمبيوتر، ونسخة للهاتف اختيارية. إذا لم تضف صورة للهاتف نعرض الأصل تلقائياً بدون قص على الشاشات الصغيرة.</div>
+        <div class="jh-dual-fields">
+          <label class="field"><span>🖥️ صورة الكمبيوتر (عرضية)</span><input type="file" name="photo" accept="image/jpeg,image/png,image/webp"><small>المقاس المقترح 1920×800. يمكنك اختيار صورة منتج موجود.</small></label>
+          <label class="field"><span>📱 صورة الهاتف (اختيارية)</span><input type="file" name="mobile_photo" accept="image/jpeg,image/png,image/webp"><small>المقاس المقترح 1080×1350، أو صورة عمودية 1080×1600.</small></label>
+        </div>
+        ${slide?.mobile_image_url?`<label class="jh-toggle"><input type="checkbox" name="remove_mobile"> حذف نسخة الهاتف واستخدام صورة الكمبيوتر بدلها</label>`:''}
+        <div class="jh-dual-fields"><label class="field"><span>عرض الكمبيوتر</span><select name="desktop_fit"><option value="cover" ${slide?.desktop_fit!=='contain'?'selected':''}>ملء الإطار مع قص الأطراف عند الحاجة</option><option value="contain" ${slide?.desktop_fit==='contain'?'selected':''}>إظهار الصورة كاملة بدون قص</option></select></label>
+        <label class="field"><span>عرض الهاتف</span><select name="mobile_fit"><option value="contain" ${slide?.mobile_fit!=='cover'?'selected':''}>إظهار الصورة كاملة بدون قص (موصى به)</option><option value="cover" ${slide?.mobile_fit==='cover'?'selected':''}>ملء الإطار مع قص الأطراف</option></select></label></div>
+        <div class="jh-dual-fields"><label class="field"><span>موضع الصورة على الكمبيوتر</span><select name="desktop_position">${['center','top','bottom','right','left'].map(x=>`<option value="${x}" ${(slide?.desktop_position||'center')===x?'selected':''}>${({center:'وسط',top:'أعلى',bottom:'أسفل',right:'يمين',left:'يسار'})[x]}</option>`).join('')}</select></label>
+        <label class="field"><span>موضع الصورة على الهاتف</span><select name="mobile_position">${['center','top','bottom','right','left'].map(x=>`<option value="${x}" ${(slide?.mobile_position||'center')===x?'selected':''}>${({center:'وسط',top:'أعلى',bottom:'أسفل',right:'يمين',left:'يسار'})[x]}</option>`).join('')}</select></label></div>
+        <div class="jh-dual-fields"><label class="field"><span>تكبير الكمبيوتر</span><input type="number" name="desktop_zoom" min="1" max="1.5" step="0.05" value="${slide?.desktop_zoom??1}"></label><label class="field"><span>تكبير الهاتف</span><input type="number" name="mobile_zoom" min="1" max="1.5" step="0.05" value="${slide?.mobile_zoom??1}"></label></div>
+        <div class="jh-live-dual-preview"><div><strong>🖥️ معاينة الكمبيوتر</strong><div class="jh-asset-preview jh-desktop-asset"><img alt="معاينة الكمبيوتر" src="${esc(safeUrl(slide?.image_url)||'')}" ${slide?.image_url?'':'hidden'}></div></div><div><strong>📱 معاينة الهاتف</strong><div class="jh-asset-preview jh-mobile-asset"><img alt="معاينة الهاتف" src="${esc(safeUrl(slide?.mobile_image_url||slide?.image_url)||'')}" ${slide?.image_url?'':'hidden'}></div></div></div>
         <label class="field"><span>ربط الصورة بـ</span><select name="target_type"><option value="none" ${!slide||slide.target_type==='none'?'selected':''}>تصميم أو إعلان عادي (بدون رابط)</option><option value="product" ${slide?.target_type==='product'?'selected':''}>منتج موجود في المتجر</option><option value="url" ${slide?.target_type==='url'?'selected':''}>رابط موقع خارجي</option></select></label>
         <label class="field jh-product-field" hidden><span>اختر منتجاً (يمكن استخدام صورته تلقائياً)</span><select name="product_id"><option value="">— اختر المنتج —</option>${productOptions}</select></label>
         <label class="field jh-url-field" hidden><span>الرابط (https://)</span><input type="url" name="target_url" placeholder="https://example.com" maxlength="500" value="${esc(slide?.target_type==='url'?slide.target_value:'')}"></label>
@@ -166,11 +186,31 @@
     const mode=form.elements.target_type;
     const updateFields=()=>{$('.jh-product-field',form).hidden=mode.value!=='product';$('.jh-url-field',form).hidden=mode.value!=='url'};
     mode.onchange=updateFields;updateFields();
-    form.onsubmit=e=>saveSlide(e,slide);
+    // Local previews work from phone files without uploading until Save is pressed.
+    const previewRefs=[];
+    const redrawPreview=()=>{
+      const desktop=form.elements.photo.files?.[0];
+      const mobile=form.elements.mobile_photo.files?.[0];
+      previewRefs.forEach(u=>URL.revokeObjectURL(u));previewRefs.length=0;
+      const objectUrl=file=>{if(!file)return '';const url=URL.createObjectURL(file);previewRefs.push(url);return url};
+      const d=objectUrl(desktop)||safeUrl(slide?.image_url);
+      const m=objectUrl(mobile)||(!form.elements.remove_mobile?.checked?safeUrl(slide?.mobile_image_url):'')||d;
+      const dImg=$('.jh-desktop-asset img',form),mImg=$('.jh-mobile-asset img',form);
+      for(const [img,src] of [[dImg,d],[mImg,m]]){img.hidden=!src;if(src)img.src=src;else img.removeAttribute('src')}
+      dImg.style.objectFit=form.elements.desktop_fit.value;
+      mImg.style.objectFit=form.elements.mobile_fit.value;
+      dImg.style.objectPosition=form.elements.desktop_position.value;
+      mImg.style.objectPosition=form.elements.mobile_position.value;
+      dImg.style.transform=`scale(${num(form.elements.desktop_zoom.value,1,1,1.5)})`;
+      mImg.style.transform=`scale(${num(form.elements.mobile_zoom.value,1,1,1.5)})`;
+    };
+    ['photo','mobile_photo','remove_mobile','desktop_fit','mobile_fit','desktop_position','mobile_position','desktop_zoom','mobile_zoom'].forEach(name=>form.elements[name]?.addEventListener('change',redrawPreview));
+    form.addEventListener('input',e=>{if(['desktop_zoom','mobile_zoom'].includes(e.target.name))redrawPreview()});
+    redrawPreview();form.onsubmit=e=>saveSlide(e,slide);
   }
   async function saveSlide(event, original){event.preventDefault();if(state.busy)return;
     const form=event.currentTarget,err=$('#jhFormError',form),btn=$('#jhSaveSlide',form);err.textContent='';const f=new FormData(form);
-    const type=String(f.get('target_type')||'none');let value='';let image=original?.image_url||'';
+    const type=String(f.get('target_type')||'none');let value='';let image=original?.image_url||'';let mobileImage=original?.mobile_image_url||null;
     if(type==='product'){
       value=String(f.get('product_id')||'');if(!value){err.textContent='اختر المنتج أولاً';return}
       const p=state.products.find(p=>String(p.id)===value);if(!p){err.textContent='المنتج المحدد غير موجود';return}
@@ -178,27 +218,40 @@
     }else if(type==='url'){
       value=String(f.get('target_url')||'').trim();if(!safeUrl(value)||!/^https?:\/\//i.test(value)){err.textContent='أدخل رابط https:// أو http:// صحيحاً';return}
     }
-    const file=form.elements.photo.files?.[0];if(file){if(!['image/jpeg','image/png','image/webp'].includes(file.type)){err.textContent='اختر JPG أو PNG أو WebP';return}if(file.size>5*1024*1024){err.textContent='حجم الصورة أكبر من 5 ميغابايت';return}}
-    if(!image&&!file){err.textContent='ارفع صورة للواجهة أو اختر منتجاً له صورة';return}
+    const file=form.elements.photo.files?.[0],mobileFile=form.elements.mobile_photo.files?.[0];
+    for(const chosen of [file,mobileFile]){if(!chosen)continue;if(!['image/jpeg','image/png','image/webp'].includes(chosen.type)){err.textContent='اختر JPG أو PNG أو WebP';return}if(chosen.size>5*1024*1024){err.textContent='الحد الأقصى 5 ميغابايت للصورة الواحدة';return}}
+    if(!image&&!file){err.textContent='ارفع صورة الكمبيوتر أو اختر منتجاً له صورة';return}
+    if(form.elements.remove_mobile?.checked)mobileImage=null;
     const durationRaw=String(f.get('duration_seconds')||'').trim();const duration=durationRaw?num(durationRaw,2,1,3600):null;
     const order=original?.sort_order??((state.adminSlides.at(-1)?.sort_order||0)+10);
     const row={title:String(f.get('title')||'').trim().slice(0,100),subtitle:String(f.get('subtitle')||'').trim().slice(0,230),button_text:String(f.get('button_text')||'').trim().slice(0,35),duration_seconds:duration,image_alt:String(f.get('image_alt')||'').trim().slice(0,160),target_type:type,target_value:value||null,enabled:form.elements.enabled.checked,sort_order:order};
     state.busy=true;btn.disabled=true;btn.textContent='جارٍ الحفظ...';let uploadedPath='';
     try{
-      if(file){const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[file.type];uploadedPath=`home/${crypto.randomUUID()}.${ext}`;
-        const uploaded=await state.db.storage.from(BUCKET).upload(uploadedPath,file,{contentType:file.type,upsert:false,cacheControl:'3600'});
-        if(uploaded.error)throw uploaded.error;image=state.db.storage.from(BUCKET).getPublicUrl(uploadedPath).data.publicUrl;}
+      const uploadImage=async chosen=>{
+        const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[chosen.type];
+        const path=`home/${crypto.randomUUID()}.${ext}`;
+        const uploaded=await state.db.storage.from(BUCKET).upload(path,chosen,{contentType:chosen.type,upsert:false,cacheControl:'3600'});
+        if(uploaded.error)throw uploaded.error;
+        uploadedPaths.push(path);
+        return state.db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+      };
+      if(file)image=await uploadImage(file);
+      if(mobileFile)mobileImage=await uploadImage(mobileFile);
       if(!safeUrl(image))throw Error('رابط الصورة غير صالح');row.image_url=image;
+      row.mobile_image_url=mobileImage||null;
       const query=original?state.db.from('joker_home_slides').update(row).eq('id',original.id):state.db.from('joker_home_slides').insert(row);
       const {error}=await query;if(error)throw error;
       // Clean up a replaced home-banner file only after the database has saved.
-      const replaced=original&&original.image_url!==image?ownedHomePath(original.image_url):'';
-      if(replaced&&!state.adminSlides.some(s=>s.id!==original.id&&s.image_url===original.image_url)){
-        const cleanup=await state.db.storage.from(BUCKET).remove([replaced]);
-        if(cleanup.error)console.warn('Old home media cleanup:',cleanup.error.message);
+      const obsolete=[original?.image_url!==image?original?.image_url:null,original?.mobile_image_url!==mobileImage?original?.mobile_image_url:null].filter(Boolean);
+      for(const oldUrl of new Set(obsolete)){
+        const oldPath=ownedHomePath(oldUrl);
+        if(oldPath && oldUrl!==image && oldUrl!==mobileImage && !state.adminSlides.some(s=>s.id!==original?.id&&(s.image_url===oldUrl||s.mobile_image_url===oldUrl))){
+          const cleanup=await state.db.storage.from(BUCKET).remove([oldPath]);
+          if(cleanup.error)console.warn('Old home media cleanup:',cleanup.error.message);
+        }
       }
       await reloadPublic();toast('✅ تم حفظ صورة الواجهة');await openManager();
-    }catch(e){err.textContent='تعذّر الحفظ: '+(e.message||String(e));if(uploadedPath){await state.db.storage.from(BUCKET).remove([uploadedPath]).catch(()=>{})}}
+    }catch(e){err.textContent='تعذّر الحفظ: '+(e.message||String(e));if(uploadedPaths.length){await state.db.storage.from(BUCKET).remove(uploadedPaths).catch(()=>{})}}
     finally{state.busy=false;if(btn.isConnected){btn.disabled=false;btn.textContent='💾 حفظ الصورة'}}
   }
   async function toggleSlide(id){const slide=state.adminSlides.find(s=>String(s.id)===String(id));if(!slide||state.busy)return;state.busy=true;
@@ -207,8 +260,11 @@
   async function deleteSlide(id){const slide=state.adminSlides.find(s=>String(s.id)===String(id));if(!slide||state.busy||!confirm('حذف هذه الصورة من الواجهة نهائياً؟'))return;
     state.busy=true;try{const {error}=await state.db.from('joker_home_slides').delete().eq('id',id);if(error)throw error;
       // Never delete a product photo or a media URL referenced by another slide.
-      const path=ownedHomePath(slide.image_url);if(path&&!state.adminSlides.some(s=>s.id!==slide.id&&s.image_url===slide.image_url)){
-        const result=await state.db.storage.from(BUCKET).remove([path]);if(result.error)console.warn('Old showcase media could not be removed:',result.error.message);
+      for(const url of new Set([slide.image_url,slide.mobile_image_url].filter(Boolean))){
+        const path=ownedHomePath(url);
+        if(path&&!state.adminSlides.some(s=>s.id!==slide.id&&(s.image_url===url||s.mobile_image_url===url))){
+          const result=await state.db.storage.from(BUCKET).remove([path]);if(result.error)console.warn('Old showcase media could not be removed:',result.error.message);
+        }
       }
       await reloadPublic();await openManager();toast('✅ حُذفت الصورة');
     }catch(e){toast('تعذر الحذف: '+e.message)}finally{state.busy=false}}

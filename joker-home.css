@@ -66,3 +66,40 @@
 .jh-manager [hidden]{display:none!important}
 @media(max-width:760px){.hero.jh-enabled{min-height:490px;margin-top:14px;border-radius:20px}.jh-slide-body{right:7%;left:7%;width:auto;top:auto;bottom:78px;transform:none;gap:11px}.jh-slide-title{font-size:clamp(28px,8.5vw,46px)}.jh-overlay{background:linear-gradient(0deg,rgba(10,7,12,.93),rgba(10,7,12,.35) 58%,rgba(10,7,12,.02))}.jh-arrow{width:36px;height:36px;font-size:25px;top:44%}.jh-dots{bottom:18px}.jh-count{bottom:10px;left:13px;font-size:10px}.jh-settings-grid{grid-template-columns:1fr}.jh-ticker-pill{padding:9px 12px;font-size:11px}.jh-admin-row{align-items:flex-start}.jh-admin-thumb{width:90px;height:68px}.jh-admin-actions{width:100%;justify-content:flex-start}}
 @media(prefers-reduced-motion:reduce){.jh-slide,.jh-slide img,.jh-slide-title,.jh-slide-subtitle,.jh-dot{transition:none!important}.jh-progress{animation:none!important}.jh-ticker-rail{animation:none!important;min-width:0;white-space:normal}.jh-ticker-rail span[aria-hidden]{display:none}}
+
+/* JOKER HOME V3 — two independent image assets, phone-first safe framing */
+.jh-slide .jh-media{position:absolute;inset:0;overflow:hidden;background:#110d14}
+.jh-slide .jh-media-blur{position:absolute;inset:-10%;background-image:var(--jh-desktop-bg);background-size:cover;background-position:var(--jh-desktop-position,center);filter:blur(35px) brightness(.48);transform:scale(1.05);pointer-events:none}
+.jh-slide .jh-picture{display:block;position:absolute;inset:0;overflow:hidden}
+.jh-slide .jh-picture img{object-fit:var(--jh-desktop-fit,cover);object-position:var(--jh-desktop-position,center);transform:scale(var(--jh-desktop-zoom,1));transition:filter .5s ease;max-width:none}
+.jh-slide.is-active .jh-picture img{transform:scale(var(--jh-desktop-zoom,1))}
+/* Retrigger independent text/CTA entrance on every slide change, including manual navigation */
+.jh-slide .jh-kicker,.jh-slide .jh-slide-title,.jh-slide .jh-slide-subtitle,.jh-slide .jh-slide-cta{animation:none;opacity:0}
+.jh-slide.is-active .jh-kicker{animation:jh-text-in .65s .06s both}
+.jh-slide.is-active .jh-slide-title{animation:jh-text-in .76s .18s both}
+.jh-slide.is-active .jh-slide-subtitle{animation:jh-text-in .72s .33s both}
+.jh-slide.is-active .jh-slide-cta{animation:jh-text-in .72s .49s both}
+@keyframes jh-text-in{from{opacity:0;filter:blur(7px);translate:0 26px}to{opacity:1;filter:blur(0);translate:0 0}}
+.jh-dual-intro{border:1px solid #a57b50;padding:13px;border-radius:12px;color:#ffe5b4;background:#422c2b;margin:10px 0 17px;font-weight:700;font-size:13px;line-height:1.9}
+.jh-dual-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.jh-live-dual-preview{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,.8fr);align-items:start;gap:15px;margin:15px 0 24px}
+.jh-live-dual-preview strong{display:block;color:#ffe0a4;margin-bottom:10px;font-size:13px}
+.jh-asset-preview{position:relative;overflow:hidden;border:1px solid #8b6955;border-radius:13px;background:#140d14;min-height:165px}
+.jh-asset-preview img{width:100%;height:100%;position:absolute;inset:0;display:block;object-fit:contain;background:radial-gradient(circle,#4a3036,#160f16)}
+.jh-mobile-asset{aspect-ratio:9/13;max-height:340px}
+.jh-desktop-asset{aspect-ratio:16/8;max-height:260px}
+@media(max-width:760px){
+.hero.jh-enabled{min-height:clamp(470px,130vw,690px)}
+.jh-slide .jh-media-blur{background-image:var(--jh-mobile-bg);background-position:var(--jh-mobile-position,center)}
+.jh-slide .jh-picture img{object-fit:var(--jh-mobile-fit,contain);object-position:var(--jh-mobile-position,center);transform:scale(var(--jh-mobile-zoom,1))}
+.jh-slide.is-active .jh-picture img{transform:scale(var(--jh-mobile-zoom,1))}
+.jh-slide-body{bottom:67px;right:6%;left:6%;gap:10px;max-width:100%;width:auto}
+.jh-slide-title{font-size:clamp(23px,6.6vw,40px);max-width:100%;overflow-wrap:anywhere}
+.jh-slide-subtitle{font-size:clamp(12px,3.4vw,16px);max-width:100%;overflow-wrap:anywhere}
+.jh-dual-fields{grid-template-columns:1fr}
+.jh-live-dual-preview{grid-template-columns:minmax(0,1fr) minmax(0,.8fr);gap:8px}
+.jh-asset-preview{min-height:130px}
+}
+@media(prefers-reduced-motion:reduce){
+.jh-slide.is-active .jh-kicker,.jh-slide.is-active .jh-slide-title,.jh-slide.is-active .jh-slide-subtitle,.jh-slide.is-active .jh-slide-cta{animation:none!important;opacity:1!important;translate:none!important;filter:none!important}
+}
