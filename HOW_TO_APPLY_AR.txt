@@ -1,0 +1,54 @@
+JOKER STORE — PATCH: INTRO + DRAWER
+====================================
+
+IMPORTANT:
+This is a small patch, not a full site replacement.
+Do NOT upload the older index.html from the ZIP you previously sent over the newer GitHub branch.
+The current GitHub branch contains newer VIP-related HTML/JS, so keep its index.html and app.js.
+
+1) Upload joker-launch.css and joker-launch.js to the ROOT of joker-v3-test.
+
+2) In the current GitHub index.html:
+   a. In <head>, after existing stylesheet links, add:
+      <link rel="stylesheet" href="joker-launch.css">
+
+   b. Immediately after <body>, add:
+      <div class="joker-splash" id="jokerSplash" role="dialog" aria-label="مرحباً بكم في متجر الجوكر">
+        <div class="joker-splash-glow"></div>
+        <img class="joker-splash-logo" src="assets/joker-app-icon-512.png" alt="شعار متجر الجوكر">
+        <div class="joker-splash-name">JOKER STORE</div>
+        <div class="joker-splash-ar">أهلاً بكم في عالمنا – متجر الجوكر</div>
+        <div class="joker-splash-en">WELCOME TO OUR WORLD</div>
+        <button id="jokerSplashSkip" class="joker-splash-skip" type="button">الدخول إلى المتجر</button>
+      </div>
+      <div class="joker-drawer-backdrop" id="jokerDrawerBackdrop"></div>
+      <aside class="joker-drawer" id="jokerDrawer" aria-label="قائمة المتجر" aria-hidden="true">
+        <div class="joker-drawer-head"><strong>JOKER STORE</strong><button id="jokerDrawerClose" type="button" aria-label="إغلاق">×</button></div>
+        <nav>
+          <a href="#home">🏠 الرئيسية</a>
+          <a href="#categoryQuick">🗂️ جميع الأقسام</a>
+          <a href="#featuredOffers">⚡ العروض المميزة</a>
+          <a href="#jokerPremiumGames">🎮 ألعاب PlayStation</a>
+          <a href="#shop">🛍️ جميع المنتجات</a>
+          <a href="#feedback">❤️ الإعجابات</a>
+          <a href="#vip">👑 أعضاء VIP</a>
+          <a href="#contact">📍 التواصل وموقع المتجر</a>
+        </nav>
+      </aside>
+
+   c. Inside the .topinner element, before the .brand element, add:
+      <button class="joker-menu-button" id="jokerMenuButton" type="button" aria-label="فتح قائمة المتجر">
+        <span></span><span></span><span></span>
+      </button>
+
+   d. Before </body>, add:
+      <script defer src="joker-launch.js"></script>
+
+3) The menu links assume the page uses these IDs:
+   home, categoryQuick, featuredOffers, jokerPremiumGames, shop, feedback, vip, contact.
+   If an ID differs in the current index, change only the corresponding href to the actual section ID.
+
+4) The splash uses assets/joker-app-icon-512.png as the logo. Replace that image path only if the approved circular source logo is stored under another exact path.
+
+This patch does not implement or alter VIP registration, like-count RPCs, rewards, referral logic, or Supabase policies.
+Those must be integrated against the current branch's app.js and existing RPC signatures, not the older ZIP snapshot.

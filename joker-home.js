@@ -5,7 +5,6 @@
   'use strict';
   const cfg = window.JOKER_CONFIG || {};
   const BUCKET = 'product-images';
-  const MAX_SLIDES = 10;
   const defaults = {default_duration_seconds: 2, ticker_text: '', ticker_enabled: false, ticker_speed_seconds: 24};
   const state = {db: null, slides: [], settings: {...defaults}, adminSlides: [], products: [], owner: false, index: 0, timer: 0, paused: false, busy: false, lastLoad: 0};
   const $ = (selector, root=document) => root.querySelector(selector);
@@ -17,6 +16,16 @@
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   let observer=null;
 
+  async function fetchAllSlides(enabledOnly=false){
+    const rows=[];const pageSize=500;
+    for(let offset=0;;offset+=pageSize){
+      let query=state.db.from('joker_home_slides').select('*');
+      if(enabledOnly)query=query.eq('enabled',true);
+      const {data,error}=await query.order('sort_order',{ascending:true}).order('created_at',{ascending:true}).range(offset,offset+pageSize-1);
+      if(error)throw error;rows.push(...(data||[]));if(!data||data.length<pageSize)break;
+    }
+    return rows;
+  }
   function stopCycle(){if(state.timer){clearTimeout(state.timer);state.timer=0}}
   function cycle(){stopCycle();if(state.slides.length<2 || state.paused || document.hidden || reduced?.matches)return;
     const current=state.slides[state.index];const ms=num(current?.duration_seconds == null ? state.settings.default_duration_seconds : current.duration_seconds,2,1,3600)*1000;
@@ -90,12 +99,12 @@
     const anchor=hero();anchor?.insertAdjacentElement('afterend',wrap);
   }
   async function reloadPublic(){if(!state.db)return;
-    const [a,b]=await Promise.all([
+    const [a,slides]=await Promise.all([
       state.db.from('joker_home_settings').select('*').eq('id',1).maybeSingle(),
-      state.db.from('joker_home_slides').select('*').eq('enabled',true).order('sort_order',{ascending:true}).order('created_at',{ascending:true}).limit(MAX_SLIDES)
+      fetchAllSlides(true)
     ]);
-    if(a.error||b.error){console.warn('Joker showcase:',a.error?.message||b.error?.message);return}
-    state.settings={...defaults,...(a.data||{})};state.slides=(b.data||[]).filter(s=>Boolean(safeUrl(s.image_url)));
+    if(a.error){console.warn('Joker showcase:',a.error.message);return}
+    state.settings={...defaults,...(a.data||{})};state.slides=slides.filter(s=>Boolean(safeUrl(s.image_url)));
     state.lastLoad=Date.now();renderHero();renderTicker();
   }
   async function checkOwner(){if(!state.db)return;try{const {data:{user}}=await state.db.auth.getUser();
@@ -111,17 +120,17 @@
   function managerError(error){const host=$('#adminContent');if(host)host.innerHTML=`<p class="order-error" role="alert">${esc(error.message||String(error))}</p><button type="button" class="outline" id="jhTryAgain">إعادة المحاولة</button>`;
     $('#jhTryAgain')?.addEventListener('click',()=>openManager().catch(managerError));}
   const preview = s => `<img class="jh-admin-thumb" loading="lazy" alt="" src="${esc(safeUrl(s.image_url))}">`;
-  async function loadAdminData(){const [s,p]=await Promise.all([
-      state.db.from('joker_home_slides').select('*').order('sort_order',{ascending:true}).order('created_at',{ascending:true}),
+  async function loadAdminData(){const [slides,p]=await Promise.all([
+      fetchAllSlides(false),
       state.db.from('products').select('id,name,image_url,available').order('name',{ascending:true}).limit(500)
     ]);
-    if(s.error)throw s.error;if(p.error)throw p.error;state.adminSlides=s.data||[];state.products=p.data||[];
+    if(p.error)throw p.error;state.adminSlides=slides;state.products=p.data||[];
   }
   async function openManager(){if(!state.owner)throw Error('هذا القسم متاح للمدير العام فقط');
     const host=$('#adminContent');if(!host)return;host.innerHTML='<p class="mute">جارٍ تحميل إعدادات الواجهة...</p>';
     await loadAdminData();if(!host.isConnected || !$('#jhAdminTab')?.classList.contains('active'))return;
     host.innerHTML=`<section class="jh-manager" dir="rtl">
-      <div class="jh-manager-heading"><div><span class="jh-admin-tag">JOKER SHOWCASE</span><h3>🎬 إدارة الواجهة الأولى</h3><p class="mute">ارفع صور عروضك وتصاميمك، واختر مدة العرض والكتابات والشريط الإخباري. الحد الأقصى ${MAX_SLIDES} صور.</p></div><button type="button" class="gold" id="jhAdd" ${state.adminSlides.length>=MAX_SLIDES?'disabled':''}>+ صورة جديدة</button></div>
+      <div class="jh-manager-heading"><div><span class="jh-admin-tag">JOKER SHOWCASE</span><h3>🎬 إدارة الواجهة الأولى</h3><p class="mute">ارفع أي عدد من صور عروضك وتصاميمك، ورتّبها وحدد مدة كل صورة والكتابات والشريط الإخباري.</p></div><button type="button" class="gold" id="jhAdd" >+ صورة جديدة</button></div>
       <form id="jhSettings" class="jh-admin-settings">
         <h4>⚙️ إعدادات الحركة والشريط</h4><div class="jh-settings-grid">
         <label class="field"><span>المدة الافتراضية لكل صورة (بالثواني)</span><input type="number" name="default_duration_seconds" min="1" max="3600" step="1" value="${num(state.settings.default_duration_seconds,2,1,3600)}" required></label>
@@ -129,8 +138,8 @@
         <label class="field"><span>نص الشريط المتحرك</span><textarea name="ticker_text" rows="2" maxlength="400" placeholder="اكتب آخر عروض الجوكر هنا...">${esc(state.settings.ticker_text||'')}</textarea></label>
         <label class="jh-toggle"><input type="checkbox" name="ticker_enabled" ${state.settings.ticker_enabled?'checked':''}> إظهار الشريط المتحرك للزبائن</label>
         <button type="submit" class="gold" id="jhSaveSettings">💾 حفظ إعدادات الواجهة</button></form>
-      <div class="jh-list-head"><h4>🖼️ الصور (${state.adminSlides.length}/${MAX_SLIDES})</h4><span class="mute">استعمل ↑ ↓ لتغيير ترتيب الظهور</span></div>
-      <div class="jh-admin-list">${state.adminSlides.map((s,i)=>`<article class="jh-admin-row" data-slide="${esc(s.id)}">${preview(s)}<div class="jh-admin-info"><strong>${esc(s.title||'صورة بدون عنوان')}</strong><small>${s.enabled?'🟢 ظاهرة':'⚪ مخفية'} · ${s.duration_seconds?s.duration_seconds+' ثانية':'المدة العامة'} · ${s.mobile_image_url?'📱 صورة هاتف خاصة':'📱 ضبط تلقائي'} · ${esc(s.target_type==='product'?'منتج':s.target_type==='url'?'رابط':'تصميم')}</small></div><div class="jh-admin-actions"><button class="outline smallBtn" data-jh-move="up" data-jh-id="${esc(s.id)}" title="تحريك للأعلى" ${i===0?'disabled':''}>↑</button><button class="outline smallBtn" data-jh-move="down" data-jh-id="${esc(s.id)}" title="تحريك للأسفل" ${i===state.adminSlides.length-1?'disabled':''}>↓</button><button class="outline smallBtn" data-jh-edit="${esc(s.id)}">تعديل</button><button class="outline smallBtn" data-jh-toggle="${esc(s.id)}">${s.enabled?'إخفاء':'إظهار'}</button><button class="danger smallBtn" data-jh-delete="${esc(s.id)}">حذف</button></div></article>`).join('')||'<p class="jh-admin-empty">لا توجد صور بعد. اضغط «+ صورة جديدة» لبدء المعرض.</p>'}</div>
+      <div class="jh-list-head"><h4>🖼️ الصور (${state.adminSlides.length})</h4><span class="mute">استعمل ↑ ↓ لتغيير ترتيب الظهور</span></div>
+      <div class="jh-admin-list">${state.adminSlides.map((s,i)=>`<article class="jh-admin-row" data-slide="${esc(s.id)}">${preview(s)}<div class="jh-admin-info"><strong>${esc(s.title||'صورة بدون عنوان')}</strong><small>${s.enabled?'🟢 ظاهرة':'⚪ مخفية'} · ${s.duration_seconds?s.duration_seconds+' ثانية':'المدة العامة'} · ${esc(s.target_type==='product'?'منتج':s.target_type==='url'?'رابط':'تصميم')}</small></div><div class="jh-admin-actions"><button class="outline smallBtn" data-jh-move="up" data-jh-id="${esc(s.id)}" title="تحريك للأعلى" ${i===0?'disabled':''}>↑</button><button class="outline smallBtn" data-jh-move="down" data-jh-id="${esc(s.id)}" title="تحريك للأسفل" ${i===state.adminSlides.length-1?'disabled':''}>↓</button><button class="outline smallBtn" data-jh-edit="${esc(s.id)}">تعديل</button><button class="outline smallBtn" data-jh-toggle="${esc(s.id)}">${s.enabled?'إخفاء':'إظهار'}</button><button class="danger smallBtn" data-jh-delete="${esc(s.id)}">حذف</button></div></article>`).join('')||'<p class="jh-admin-empty">لا توجد صور بعد. اضغط «+ صورة جديدة» لبدء المعرض.</p>'}</div>
       <p class="jh-admin-tip">المقاس المقترح للصور: 1920 × 800 بكسل. JPG / PNG / WebP، بحد أقصى 5 ميغابايت للصورة.</p>
     </section>`;
     $('#jhAdd',host)?.addEventListener('click',()=>openEditor(null));
@@ -215,9 +224,8 @@
     if(form.elements.remove_mobile?.checked)mobileImage=null;
     const durationRaw=String(f.get('duration_seconds')||'').trim();const duration=durationRaw?num(durationRaw,2,1,3600):null;
     const order=original?.sort_order??((state.adminSlides.at(-1)?.sort_order||0)+10);
-    const row={title:String(f.get('title')||'').trim().slice(0,100),subtitle:String(f.get('subtitle')||'').trim().slice(0,230),button_text:String(f.get('button_text')||'').trim().slice(0,35),duration_seconds:duration,image_alt:String(f.get('image_alt')||'').trim().slice(0,160),target_type:type,target_value:value||null,enabled:form.elements.enabled.checked,sort_order:order,mobile_image_url:mobileImage,desktop_fit:String(f.get('desktop_fit'))==='contain'?'contain':'cover',mobile_fit:String(f.get('mobile_fit'))==='cover'?'cover':'contain',desktop_position:['center','top','bottom','left','right'].includes(String(f.get('desktop_position')))?String(f.get('desktop_position')):'center',mobile_position:['center','top','bottom','left','right'].includes(String(f.get('mobile_position')))?String(f.get('mobile_position')):'center',desktop_zoom:num(f.get('desktop_zoom'),1,1,1.5),mobile_zoom:num(f.get('mobile_zoom'),1,1,1.5)};
-    if(!original&&state.adminSlides.length>=MAX_SLIDES){err.textContent='الحد الأقصى 10 صور، احذف صورة لإضافة أخرى';return}
-    state.busy=true;btn.disabled=true;btn.textContent='جارٍ الحفظ...';const uploadedPaths=[];
+    const row={title:String(f.get('title')||'').trim().slice(0,100),subtitle:String(f.get('subtitle')||'').trim().slice(0,230),button_text:String(f.get('button_text')||'').trim().slice(0,35),duration_seconds:duration,image_alt:String(f.get('image_alt')||'').trim().slice(0,160),target_type:type,target_value:value||null,enabled:form.elements.enabled.checked,sort_order:order};
+    state.busy=true;btn.disabled=true;btn.textContent='جارٍ الحفظ...';let uploadedPath='';
     try{
       const uploadImage=async chosen=>{
         const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[chosen.type];
